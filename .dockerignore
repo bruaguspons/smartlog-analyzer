@@ -1,0 +1,13 @@
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+!.env.example
+src/shared/db/generated
+tests
+docs
+.claude
+.agents
+.atl
