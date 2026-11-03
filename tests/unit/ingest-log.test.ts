@@ -1,0 +1,50 @@
+import { describe, expect, it, vi } from 'vitest';
+import { ingestLog } from '../../src/modules/logs/application/ingest-log.js';
+import type { Log } from '../../src/modules/logs/domain/log.js';
+import type { LogRepository } from '../../src/modules/logs/domain/log-repository.js';
+import { InMemoryLogRepository } from '../../src/modules/logs/infrastructure/in-memory-log-repository.js';
+
+const base = { serviceId: 7, level: 'INFO', timestamp: new Date('2026-11-03T10:00:00Z'), message: 'hi' } as const;
+
+describe('ingestLog', () => {
+  it('S21: takes the id from newId and the serviceId from the command', async () => {
+    const repo = new InMemoryLogRepository();
+
+    const log = await ingestLog(base, { repo, newId: () => 'X' });
+
+    expect(log.id).toBe('X');
+    expect(log.serviceId).toBe(7);
+    expect(repo.logs).toEqual([log]);
+  });
+
+  it('normalizes absent optionals to null', async () => {
+    const log = await ingestLog(base, { repo: new InMemoryLogRepository(), newId: () => 'X' });
+
+    expect(log.traceId).toBeNull();
+    expect(log.metadata).toBeNull();
+  });
+
+  it('keeps provided optionals', async () => {
+    const log = await ingestLog(
+      { ...base, traceId: 't', metadata: { a: 1 } },
+      { repo: new InMemoryLogRepository(), newId: () => 'X' },
+    );
+
+    expect(log).toMatchObject({ traceId: 't', metadata: { a: 1 } });
+  });
+
+  it('calls repo.create exactly once', async () => {
+    const create = vi.fn((l: Log) => Promise.resolve(l));
+    const repo: LogRepository = { create };
+
+    await ingestLog(base, { repo, newId: () => 'X' });
+
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates repository errors', async () => {
+    const repo: LogRepository = { create: () => Promise.reject(new Error('db down')) };
+
+    await expect(ingestLog(base, { repo, newId: () => 'X' })).rejects.toThrow('db down');
+  });
+});
