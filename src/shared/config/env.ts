@@ -8,12 +8,16 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().min(1).default('0.0.0.0'),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+  DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  SEED_ON_START: z.stringbool().default(true),
 });
 
 export interface Config {
   port: number;
   host: string;
   logLevel: LogLevel;
+  databaseUrl: string;
+  seedOnStart: boolean;
 }
 
 export class ConfigError extends Error {
@@ -30,6 +34,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   if (!result.success) {
     throw new ConfigError(result.error);
   }
-  const { PORT, HOST, LOG_LEVEL } = result.data;
-  return { port: PORT, host: HOST, logLevel: LOG_LEVEL };
+  const { PORT, HOST, LOG_LEVEL, DATABASE_URL, SEED_ON_START } = result.data;
+  return { port: PORT, host: HOST, logLevel: LOG_LEVEL, databaseUrl: DATABASE_URL, seedOnStart: SEED_ON_START };
 }
