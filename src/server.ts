@@ -1,4 +1,5 @@
 import { buildApp } from './app.js';
+import { InMemoryServiceRepository } from './modules/services/infrastructure/in-memory-service-repository.js';
 import { ConfigError, loadConfig, type Config } from './shared/config/env.js';
 import { registerGracefulShutdown } from './shared/http/graceful-shutdown.js';
 
@@ -13,7 +14,8 @@ try {
   throw err;
 }
 
-const app = buildApp({ logLevel: config.logLevel });
+// TEMPORARY: empty repo, all protected routes return 401 until the Prisma repository change.
+const app = buildApp({ serviceRepository: new InMemoryServiceRepository(), logLevel: config.logLevel });
 registerGracefulShutdown(app);
 
 try {
