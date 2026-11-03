@@ -3,7 +3,7 @@ import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  { ignores: ['dist/', 'coverage/'] },
+  { ignores: ['dist/', 'coverage/', 'src/shared/db/generated/'] },
   { files: ['**/*.{js,mjs,cjs}'], extends: [js.configs.recommended] },
   {
     files: ['**/*.ts'],

@@ -1,0 +1,20 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/shared/db/generated"
+  importFileExtension = "js"
+  moduleFormat        = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Service {
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+  apiKey      String  @unique @map("api_key")
+  isActive    Boolean @default(true) @map("is_active")
+
+  @@map("services")
+}
