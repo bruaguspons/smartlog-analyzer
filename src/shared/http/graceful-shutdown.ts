@@ -12,7 +12,9 @@ export function registerGracefulShutdown(
   app: Pick<FastifyInstance, 'close' | 'log'>,
   install: typeof closeWithGrace = closeWithGrace,
 ): ReturnType<typeof closeWithGrace> {
-  return install({ delay: SHUTDOWN_DELAY_MS, logger: app.log }, async ({ err }) => {
+  return install({ delay: SHUTDOWN_DELAY_MS, logger: app.log }, async ({ err, signal }) => {
+    // close-with-grace only logs the second signal, so the first one is logged here.
+    if (signal) app.log.info({ signal }, 'signal received, closing server');
     if (err) app.log.error({ err }, 'fatal error, closing server');
     await app.close();
   });

@@ -6,7 +6,7 @@ type Callback = (opts: { err?: Error; signal?: string }) => Promise<void>;
 function setup(close: () => Promise<void> = () => Promise.resolve()) {
   const handle = { close: vi.fn(), uninstall: vi.fn() };
   const install = vi.fn<(opts: { delay: number; logger: unknown }, cb: Callback) => typeof handle>(() => handle);
-  const app = { close: vi.fn(close), log: { error: vi.fn() } };
+  const app = { close: vi.fn(close), log: { error: vi.fn(), info: vi.fn() } };
   const result = registerGracefulShutdown(app as never, install as never);
   const callback = install.mock.calls[0]?.[1] as Callback;
   return { app, install, callback, handle, result };
@@ -21,9 +21,10 @@ describe('registerGracefulShutdown', () => {
     expect(result).toBe(handle);
   });
 
-  it('S-PL-1: a signal closes the app once without logging an error', async () => {
+  it('S-PL-1: a signal is logged at info and closes the app once without logging an error', async () => {
     const { app, callback } = setup();
     await callback({ signal: 'SIGTERM' });
+    expect(app.log.info).toHaveBeenCalledWith({ signal: 'SIGTERM' }, expect.any(String));
     expect(app.close).toHaveBeenCalledTimes(1);
     expect(app.log.error).not.toHaveBeenCalled();
   });
@@ -32,6 +33,7 @@ describe('registerGracefulShutdown', () => {
     const { app, callback } = setup();
     const err = new Error('boom');
     await callback({ err });
+    expect(app.log.info).not.toHaveBeenCalled();
     expect(app.log.error).toHaveBeenCalledWith({ err }, expect.any(String));
     expect(app.close).toHaveBeenCalledTimes(1);
   });
