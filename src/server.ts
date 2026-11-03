@@ -1,6 +1,7 @@
 import { buildApp } from './app.js';
-import { InMemoryServiceRepository } from './modules/services/infrastructure/in-memory-service-repository.js';
+import { PrismaServiceRepository } from './modules/services/infrastructure/prisma-service-repository.js';
 import { ConfigError, loadConfig, type Config } from './shared/config/env.js';
+import { createPrismaClient } from './shared/db/prisma-client.js';
 import { registerGracefulShutdown } from './shared/http/graceful-shutdown.js';
 
 let config: Config;
@@ -14,8 +15,16 @@ try {
   throw err;
 }
 
-// TEMPORARY: empty repo, all protected routes return 401 until the Prisma repository change.
-const app = buildApp({ serviceRepository: new InMemoryServiceRepository(), logLevel: config.logLevel });
+const prisma = createPrismaClient(config.databaseUrl);
+const app = buildApp({ serviceRepository: new PrismaServiceRepository(prisma), logLevel: config.logLevel });
+// app.close() runs onClose hooks, so graceful shutdown disconnects the pool without touching the shutdown module.
+app.addHook('onClose', async () => {
+  try {
+    await prisma.$disconnect();
+  } catch (err) {
+    app.log.error({ err }, 'failed to disconnect Prisma');
+  }
+});
 registerGracefulShutdown(app);
 
 try {
