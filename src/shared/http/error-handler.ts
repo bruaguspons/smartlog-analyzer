@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { hasZodFastifySchemaValidationErrors, isResponseSerializationError } from 'fastify-type-provider-zod';
 import { AppError, NotFoundError } from '../errors/app-error.js';
 
 export interface ErrorEnvelope {
@@ -8,12 +9,6 @@ export interface ErrorEnvelope {
 export interface ErrorResponse {
   statusCode: number;
   body: ErrorEnvelope;
-}
-
-interface ValidationIssue {
-  instancePath?: string;
-  keyword?: string;
-  params?: { missingProperty?: string };
 }
 
 const INTERNAL_MESSAGE = 'Internal server error';
@@ -31,13 +26,6 @@ function internal(): ErrorResponse {
   };
 }
 
-function issuePath(issue: ValidationIssue, context: unknown): string {
-  const fromInstance = (issue.instancePath ?? '').replace(/^\//, '').replaceAll('/', '.');
-  if (fromInstance) return fromInstance;
-  if (issue.params?.missingProperty) return issue.params.missingProperty;
-  return typeof context === 'string' ? context : '';
-}
-
 /** Pure mapping from any thrown value to the HTTP status and error envelope. */
 export function toErrorResponse(error: unknown): ErrorResponse {
   if (error instanceof AppError) {
@@ -49,12 +37,12 @@ export function toErrorResponse(error: unknown): ErrorResponse {
   }
   if (typeof error !== 'object' || error === null) return internal();
 
-  const e = error as { validation?: unknown; validationContext?: unknown; statusCode?: unknown; message?: unknown };
-  if (Array.isArray(e.validation)) {
-    const details = (e.validation as ValidationIssue[]).map((issue) => ({
-      path: issuePath(issue, e.validationContext),
-      issue: issue.keyword ?? 'invalid',
-    }));
+  // Response serialization failures must never leak schema details (e.g. internal fields).
+  if (isResponseSerializationError(error)) return internal();
+
+  const e = error as { statusCode?: unknown; message?: unknown };
+  if (hasZodFastifySchemaValidationErrors(error)) {
+    const details = error.validation.map(({ instancePath, keyword, message }) => ({ instancePath, keyword, message }));
     const message = typeof e.message === 'string' ? e.message : 'Invalid request';
     return { statusCode: 400, body: { error: { code: 'VALIDATION_ERROR', message, details } } };
   }
@@ -74,7 +62,9 @@ export function toErrorResponse(error: unknown): ErrorResponse {
 export function registerErrorHandling(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => {
     const { statusCode, body } = toErrorResponse(error);
-    if (statusCode >= 500) request.log.error({ err: error }, 'unhandled error');
+    if (isResponseSerializationError(error)) {
+      request.log.error({ err: error, issues: error.cause.issues }, 'response serialization failed');
+    } else if (statusCode >= 500) request.log.error({ err: error }, 'unhandled error');
     else request.log.info({ err: error }, 'request rejected');
     return reply.status(statusCode).send(body);
   });

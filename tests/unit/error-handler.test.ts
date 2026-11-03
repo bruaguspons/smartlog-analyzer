@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { afterEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { buildApp } from '../../src/app.js';
 import { InMemoryServiceRepository } from '../../src/modules/services/infrastructure/in-memory-service-repository.js';
 import { AppError } from '../../src/shared/errors/app-error.js';
@@ -12,6 +14,8 @@ const repo = new InMemoryServiceRepository([
 
 describe('error envelope', () => {
   let app: FastifyInstance;
+
+  const typed = () => app.withTypeProvider<ZodTypeProvider>();
 
   afterEach(async () => {
     await app.close();
@@ -28,17 +32,55 @@ describe('error envelope', () => {
     expect('details' in body.error).toBe(false);
   });
 
-  it('S-EE-2: schema validation -> 400 VALIDATION_ERROR with details', async () => {
+  it('S-EV-1: invalid zod body -> 400 with details limited to instancePath/keyword/message', async () => {
     app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
-    app.get('/v', { schema: { querystring: { type: 'object', properties: { level: { enum: ['INFO', 'ERROR'] } } } } }, () => ({}));
-    const res = await app.inject({ method: 'GET', url: '/v?level=NOPE', headers: AUTH });
+    typed().post('/v', { schema: { body: z.object({ level: z.enum(['INFO', 'ERROR']) }) } }, () => ({}));
+    const res = await app.inject({ method: 'POST', url: '/v', headers: AUTH, payload: { level: 'X' } });
     expect(res.statusCode).toBe(400);
-    const { error } = res.json<{ error: { code: string; details: { path: string; issue: string }[] } }>();
+    const { error } = res.json<{ error: { code: string; details: Record<string, unknown>[] } }>();
     expect(error.code).toBe('VALIDATION_ERROR');
-    expect(error.details).toEqual([{ path: 'level', issue: 'enum' }]);
+    expect(error.details).toHaveLength(1);
+    expect(Object.keys(error.details[0] ?? {}).sort()).toEqual(['instancePath', 'keyword', 'message']);
+    expect(error.details[0]).toMatchObject({ instancePath: '/level', keyword: 'invalid_value' });
+    expect(typeof error.details[0]?.message).toBe('string');
   });
 
-  it('S-EE-3: malformed JSON body -> observed 400 VALIDATION_ERROR', async () => {
+  it('S-EV-2: invalid zod query -> details instancePath /limit', async () => {
+    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    typed().get('/q', { schema: { querystring: z.object({ limit: z.coerce.number() }) } }, () => ({}));
+    const res = await app.inject({ method: 'GET', url: '/q?limit=abc', headers: AUTH });
+    expect(res.statusCode).toBe(400);
+    const { error } = res.json<{ error: { code: string; details: { instancePath: string }[] } }>();
+    expect(error.code).toBe('VALIDATION_ERROR');
+    expect(error.details[0]?.instancePath).toBe('/limit');
+  });
+
+  it('S-EV-3: multiple issues -> one details item per issue', async () => {
+    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    typed().post('/v', { schema: { body: z.object({ a: z.string(), b: z.string() }) } }, () => ({}));
+    const res = await app.inject({ method: 'POST', url: '/v', headers: AUTH, payload: {} });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: { details: unknown[] } }>().error.details).toHaveLength(2);
+  });
+
+  it('S-EV-4: response schema mismatch -> generic 500, no leak, error logged', async () => {
+    const lines: string[] = [];
+    app = buildApp({ serviceRepository: repo, logLevel: 'info', logStream: { write: (m) => lines.push(m) } });
+    typed().get(
+      '/r',
+      { schema: { response: { 200: z.object({ id: z.string() }) } } },
+      // Deliberately violates the response schema.
+      () => ({ id: 1 }) as unknown as { id: string },
+    );
+    const res = await app.inject({ method: 'GET', url: '/r', headers: AUTH });
+    expect(res.statusCode).toBe(500);
+    expect(res.json<{ error: { code: string } }>().error.code).toBe('INTERNAL_ERROR');
+    expect(res.body).not.toMatch(/"id"|expected|string/);
+    expect('details' in res.json<{ error: object }>().error).toBe(false);
+    expect(lines.map((l) => JSON.parse(l) as { level: number }).some((l) => l.level === 50)).toBe(true);
+  });
+
+  it('S-EV-5: malformed JSON body -> observed 400 VALIDATION_ERROR', async () => {
     app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
@@ -64,7 +106,7 @@ describe('error envelope', () => {
     expect(res.json<{ error: { code: string } }>().error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('S-EE-4: unsupported media type -> observed 415 VALIDATION_ERROR envelope', async () => {
+  it('S-EV-7: unsupported media type -> observed 415 VALIDATION_ERROR envelope', async () => {
     app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
@@ -77,7 +119,7 @@ describe('error envelope', () => {
     expect(res.json<{ error: { code: string } }>().error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('observed: body over bodyLimit -> 413 PAYLOAD_TOO_LARGE', async () => {
+  it('S-EV-6: body over bodyLimit -> 413 PAYLOAD_TOO_LARGE', async () => {
     app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
@@ -167,6 +209,12 @@ describe('toErrorResponse', () => {
     expect(res.statusCode).toBe(statusCode);
     expect(res.body.error.code).toBe(code);
     expect('details' in res.body.error).toBe(false);
+  });
+
+  it('S-EV-8: statusCode 429 keeps status with VALIDATION_ERROR', () => {
+    const res = toErrorResponse({ statusCode: 429, message: 'slow down' });
+    expect(res.statusCode).toBe(429);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('maps non-object throwables to 500', () => {

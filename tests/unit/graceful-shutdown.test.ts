@@ -1,80 +1,43 @@
-import { EventEmitter } from 'node:events';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  DEFAULT_SHUTDOWN_TIMEOUT_MS,
-  registerGracefulShutdown,
-  type ShutdownTarget,
-} from '../../src/shared/http/graceful-shutdown.js';
+import { describe, expect, it, vi } from 'vitest';
+import { registerGracefulShutdown, SHUTDOWN_DELAY_MS } from '../../src/shared/http/graceful-shutdown.js';
 
-function setup(close: () => PromiseLike<unknown>) {
-  const source = new EventEmitter();
-  const exit = vi.fn();
-  const closeFn = vi.fn(close);
-  const log = { info: vi.fn(), error: vi.fn() };
-  const app: ShutdownTarget = { close: closeFn, log };
-  registerGracefulShutdown(app, { processLike: source, exit });
-  return { source, exit, closeFn, log };
+type Callback = (opts: { err?: Error; signal?: string }) => Promise<void>;
+
+function setup(close: () => Promise<void> = () => Promise.resolve()) {
+  const handle = { close: vi.fn(), uninstall: vi.fn() };
+  const install = vi.fn<(opts: { delay: number; logger: unknown }, cb: Callback) => typeof handle>(() => handle);
+  const app = { close: vi.fn(close), log: { error: vi.fn() } };
+  const result = registerGracefulShutdown(app as never, install as never);
+  const callback = install.mock.calls[0]?.[1] as Callback;
+  return { app, install, callback, handle, result };
 }
 
 describe('registerGracefulShutdown', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('closes once then exits 0 on SIGTERM', async () => {
-    const { source, exit, closeFn } = setup(() => Promise.resolve());
-    source.emit('SIGTERM', 'SIGTERM');
-    await vi.advanceTimersByTimeAsync(0);
-    expect(closeFn).toHaveBeenCalledTimes(1);
-    expect(exit).toHaveBeenCalledExactlyOnceWith(0);
+  it('installs with the forced-exit delay and the app logger, returning the handle', () => {
+    const { app, install, handle, result } = setup();
+    expect(SHUTDOWN_DELAY_MS).toBe(8000);
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(install.mock.calls[0]?.[0]).toEqual({ delay: 8000, logger: app.log });
+    expect(result).toBe(handle);
   });
 
-  it('ignores repeated signals while shutting down', async () => {
-    const { source, exit, closeFn } = setup(() => Promise.resolve());
-    source.emit('SIGINT', 'SIGINT');
-    source.emit('SIGTERM', 'SIGTERM');
-    await vi.advanceTimersByTimeAsync(0);
-    expect(closeFn).toHaveBeenCalledTimes(1);
-    expect(exit).toHaveBeenCalledTimes(1);
+  it('S-PL-1: a signal closes the app once without logging an error', async () => {
+    const { app, callback } = setup();
+    await callback({ signal: 'SIGTERM' });
+    expect(app.close).toHaveBeenCalledTimes(1);
+    expect(app.log.error).not.toHaveBeenCalled();
   });
 
-  it('forces exit(1) when close never settles', async () => {
-    const { source, exit } = setup(() => new Promise(() => undefined));
-    source.emit('SIGTERM', 'SIGTERM');
-    await vi.advanceTimersByTimeAsync(DEFAULT_SHUTDOWN_TIMEOUT_MS);
-    expect(exit).toHaveBeenCalledExactlyOnceWith(1);
+  it('S-PL-2: a fatal error is logged and the app is still closed', async () => {
+    const { app, callback } = setup();
+    const err = new Error('boom');
+    await callback({ err });
+    expect(app.log.error).toHaveBeenCalledWith({ err }, expect.any(String));
+    expect(app.close).toHaveBeenCalledTimes(1);
   });
 
-  it('leaves no pending timer and never exits 1 on success', async () => {
-    const { source, exit } = setup(() => Promise.resolve());
-    source.emit('SIGTERM', 'SIGTERM');
-    await vi.advanceTimersByTimeAsync(0);
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(DEFAULT_SHUTDOWN_TIMEOUT_MS * 2);
-    expect(exit).not.toHaveBeenCalledWith(1);
-  });
-
-  it('logs and exits 1 when close rejects', async () => {
-    const { source, exit, log } = setup(() => Promise.reject(new Error('boom')));
-    source.emit('SIGTERM', 'SIGTERM');
-    await vi.advanceTimersByTimeAsync(0);
-    expect(log.error).toHaveBeenCalledTimes(1);
-    expect(exit).toHaveBeenCalledExactlyOnceWith(1);
-    expect(exit).not.toHaveBeenCalledWith(0);
-  });
-
-  it('honors custom signals', () => {
-    const source = new EventEmitter();
-    const exit = vi.fn();
-    const app: ShutdownTarget = {
-      close: () => Promise.resolve(),
-      log: { info: vi.fn(), error: vi.fn() },
-    };
-    registerGracefulShutdown(app, { processLike: source, exit, signals: ['SIGUSR2'] });
-    expect(source.listenerCount('SIGUSR2')).toBe(1);
-    expect(source.listenerCount('SIGTERM')).toBe(0);
+  it('S-PL-3: a close failure propagates', async () => {
+    const { callback } = setup(() => Promise.reject(new Error('close failed')));
+    await expect(callback({ signal: 'SIGINT' })).rejects.toThrow('close failed');
   });
 });
