@@ -6,12 +6,15 @@ import { registerAuthHook } from './modules/services/http/auth-hook.js';
 import type { ServiceRepository } from './modules/services/domain/service-repository.js';
 import type { LogLevel } from './shared/config/env.js';
 import { registerErrorHandling } from './shared/http/error-handler.js';
+import { healthRoute, type DatabaseCheck } from './shared/http/health-route.js';
 
 const BODY_LIMIT_BYTES = 1_048_576; // 1 MiB, the 413 limit of ARCHITECTURE.md 6.1
 
 export interface BuildAppOptions {
   /** Required: auth is always on (fail-closed by type). */
   serviceRepository: ServiceRepository;
+  /** Required: `GET /api/health` must probe the real database, never report ok blindly. */
+  checkDatabase: DatabaseCheck;
   /** Route plugins mounted inside the authenticated `/api` scope. */
   apiRoutes?: readonly FastifyPluginAsyncZod[];
   logLevel?: LogLevel;
@@ -44,7 +47,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // Root-level, outside the /api scope: public by construction (no hook applies).
   void app.register(swaggerUi, { routePrefix: '/docs' });
 
-  const { serviceRepository, apiRoutes = [] } = options;
+  const { serviceRepository, checkDatabase, apiRoutes = [] } = options;
+  // Sibling of the /api scope below, so the auth hook never applies to it.
+  void app.register(healthRoute, { prefix: '/api', checkDatabase });
   // Plain plugin (no fastify-plugin): the hook stays inside the scope, so 404s and out-of-scope routes skip auth.
   void app.register(
     async (api) => {

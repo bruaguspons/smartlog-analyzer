@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { buildApp } from '../../src/app.js';
 import type { ServiceRepository } from '../../src/modules/services/domain/service-repository.js';
 
+const dbOk = () => Promise.resolve();
+
 const findByApiKey = vi.fn(() => Promise.resolve(null));
 const repo: ServiceRepository = { findByApiKey };
 
@@ -24,6 +26,7 @@ describe('buildApp', () => {
   const build = (logStream?: { write(m: string): void }) => {
     app = buildApp({
       serviceRepository: repo,
+      checkDatabase: dbOk,
       apiRoutes: [apiRoutes],
       logLevel: logStream ? 'info' : 'silent',
       ...(logStream && { logStream }),

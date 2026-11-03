@@ -7,6 +7,8 @@ import type { Service } from '../../src/modules/services/domain/service.js';
 import type { ServiceRepository } from '../../src/modules/services/domain/service-repository.js';
 import { InMemoryServiceRepository } from '../../src/modules/services/infrastructure/in-memory-service-repository.js';
 
+const dbOk = () => Promise.resolve();
+
 const active: Service = { id: 7, name: 'svc', description: null, apiKey: 'k-active', isActive: true };
 const off: Service = { id: 8, name: 'off', description: null, apiKey: 'k-off', isActive: false };
 
@@ -37,6 +39,7 @@ describe('auth hook (/api scope)', () => {
   function build(repo: ServiceRepository, logLevel: 'silent' | 'trace' = 'silent', logStream?: { write(m: string): void }) {
     app = buildApp({
       serviceRepository: repo,
+      checkDatabase: dbOk,
       apiRoutes: [testRoutes],
       logLevel,
       ...(logStream && { logStream }),

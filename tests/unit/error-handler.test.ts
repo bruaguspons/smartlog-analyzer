@@ -7,6 +7,8 @@ import { InMemoryServiceRepository } from '../../src/modules/services/infrastruc
 import { AppError } from '../../src/shared/errors/app-error.js';
 import { toErrorResponse } from '../../src/shared/http/error-handler.js';
 
+const dbOk = () => Promise.resolve();
+
 const AUTH = { 'x-api-key': 'k-test' };
 const repo = new InMemoryServiceRepository([
   { id: 1, name: 'svc', description: null, apiKey: 'k-test', isActive: true },
@@ -22,7 +24,7 @@ describe('error envelope', () => {
   });
 
   it('S-EE-1: unknown route -> 404 NOT_FOUND, no details key', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     const res = await app.inject({ method: 'GET', url: '/does-not-exist', headers: AUTH });
     expect(res.statusCode).toBe(404);
     expect(res.headers['content-type']).toMatch(/^application\/json/);
@@ -33,7 +35,7 @@ describe('error envelope', () => {
   });
 
   it('S-EV-1: invalid zod body -> 400 with details limited to instancePath/keyword/message', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     typed().post('/v', { schema: { body: z.object({ level: z.enum(['INFO', 'ERROR']) }) } }, () => ({}));
     const res = await app.inject({ method: 'POST', url: '/v', headers: AUTH, payload: { level: 'X' } });
     expect(res.statusCode).toBe(400);
@@ -46,7 +48,7 @@ describe('error envelope', () => {
   });
 
   it('S-EV-2: invalid zod query -> details instancePath /limit', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     typed().get('/q', { schema: { querystring: z.object({ limit: z.coerce.number() }) } }, () => ({}));
     const res = await app.inject({ method: 'GET', url: '/q?limit=abc', headers: AUTH });
     expect(res.statusCode).toBe(400);
@@ -56,7 +58,7 @@ describe('error envelope', () => {
   });
 
   it('S-EV-3: multiple issues -> one details item per issue', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     typed().post('/v', { schema: { body: z.object({ a: z.string(), b: z.string() }) } }, () => ({}));
     const res = await app.inject({ method: 'POST', url: '/v', headers: AUTH, payload: {} });
     expect(res.statusCode).toBe(400);
@@ -65,7 +67,7 @@ describe('error envelope', () => {
 
   it('S-EV-4: response schema mismatch -> generic 500, no leak, error logged', async () => {
     const lines: string[] = [];
-    app = buildApp({ serviceRepository: repo, logLevel: 'info', logStream: { write: (m) => lines.push(m) } });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'info', logStream: { write: (m) => lines.push(m) } });
     typed().get(
       '/r',
       { schema: { response: { 200: z.object({ id: z.string() }) } } },
@@ -81,7 +83,7 @@ describe('error envelope', () => {
   });
 
   it('S-EV-5: malformed JSON body -> observed 400 VALIDATION_ERROR', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
       method: 'POST',
@@ -94,7 +96,7 @@ describe('error envelope', () => {
   });
 
   it('empty body with JSON content-type -> observed 400 VALIDATION_ERROR', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
       method: 'POST',
@@ -107,7 +109,7 @@ describe('error envelope', () => {
   });
 
   it('S-EV-7: unsupported media type -> observed 415 VALIDATION_ERROR envelope', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
       method: 'POST',
@@ -120,7 +122,7 @@ describe('error envelope', () => {
   });
 
   it('S-EV-6: body over bodyLimit -> 413 PAYLOAD_TOO_LARGE', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
       method: 'POST',
@@ -133,7 +135,7 @@ describe('error envelope', () => {
   });
 
   it('S-EE-5: unexpected error -> generic 500 without leaks', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.get('/boom', () => {
       throw new Error('db password=secret at /srv/x');
     });
@@ -145,7 +147,7 @@ describe('error envelope', () => {
 
   it('S-EE-6: original error is logged at error level with stack', async () => {
     const lines: string[] = [];
-    app = buildApp({ serviceRepository: repo, logLevel: 'info', logStream: { write: (m) => lines.push(m) } });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'info', logStream: { write: (m) => lines.push(m) } });
     app.get('/boom', () => {
       throw new Error('db password=secret at /srv/x');
     });
@@ -158,7 +160,7 @@ describe('error envelope', () => {
   });
 
   it('S-EE-7: AppError passes through with details', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.get('/conflict', () => {
       throw new AppError(409, 'ANALYSIS_IN_PROGRESS', 'busy', { id: 'x' });
     });
@@ -170,7 +172,7 @@ describe('error envelope', () => {
   });
 
   it('S-EE-9: non-error statusCode (200 / non-numeric) -> generic 500', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.get('/a', () => {
       throw Object.assign(new Error('x'), { statusCode: 200 });
     });
@@ -185,7 +187,7 @@ describe('error envelope', () => {
   });
 
   it('S-EE-10: errors from an encapsulated child plugin use the root handler', async () => {
-    app = buildApp({ serviceRepository: repo, logLevel: 'silent' });
+    app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.register((child, _opts, done) => {
       child.get('/child', () => {
         throw new AppError(409, 'ANALYSIS_IN_PROGRESS', 'busy');
