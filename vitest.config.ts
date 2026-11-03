@@ -15,6 +15,9 @@ export default defineConfig({
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],
           environment: 'node',
+          globalSetup: ['tests/integration/global-setup.ts'],
+          // Files share one database, so they must run serially.
+          fileParallelism: false,
           // Headroom for container startup (Testcontainers).
           testTimeout: 60_000,
           hookTimeout: 120_000,
