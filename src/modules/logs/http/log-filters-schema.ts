@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import { LOG_LEVELS } from '../domain/log.js';
 import { MAX_TRACE_ID_LENGTH } from './ingest-log-schema.js';
+import { NO_NUL_MESSAGE, noNul } from './no-nul.js';
 
 export const MAX_SEARCH_LENGTH = 256;
+/** `services.id` is a Postgres Int4: larger values would overflow in the query and surface as a 500. */
+export const MAX_SERVICE_ID = 2_147_483_647;
 
 /**
  * Query strings deliver a repeated key as an array and a single one as a string:
@@ -18,12 +21,12 @@ const isoDate = z.iso.datetime({ offset: true }).transform((s) => new Date(s));
  * because zod 4 forbids `.extend()` on refined objects: callers compose their own strictObject.
  */
 export const logFiltersShape = {
-  serviceId: z.coerce.number().int().positive().optional(),
+  serviceId: z.coerce.number().int().positive().max(MAX_SERVICE_ID).optional(),
   level: queryArray(z.enum(LOG_LEVELS)).optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
-  traceId: z.string().min(1).max(MAX_TRACE_ID_LENGTH).optional(),
-  search: z.string().trim().min(1).max(MAX_SEARCH_LENGTH).optional(),
+  traceId: z.string().min(1).max(MAX_TRACE_ID_LENGTH).refine(noNul, NO_NUL_MESSAGE).optional(),
+  search: z.string().trim().min(1).max(MAX_SEARCH_LENGTH).refine(noNul, NO_NUL_MESSAGE).optional(),
 };
 
 /** `superRefine` callback: `from` must not be after `to` (equal is allowed). */

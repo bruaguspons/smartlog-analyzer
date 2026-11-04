@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { analyzeBodySchema } from '../../src/modules/analysis/http/analyze-schema.js';
+import { listLogsQuerySchema } from '../../src/modules/logs/http/list-logs-schema.js';
+import { logStatsQuerySchema } from '../../src/modules/logs/http/log-stats-schema.js';
 import {
   checkDateRange,
   logFiltersShape,
@@ -59,5 +62,28 @@ describe('log filters schema', () => {
     bad({ search: '  ' });
     expect(ok({ search: 'a'.repeat(256) }).success).toBe(true);
     bad({ search: 'a'.repeat(257) });
+  });
+
+  it('serviceId: accepts the Int4 maximum, rejects anything beyond or malformed', () => {
+    expect(ok({ serviceId: '2147483647' }).data).toEqual({ serviceId: 2147483647 });
+    for (const serviceId of ['2147483648', '0', '-1', '1.5', 'abc']) bad({ serviceId });
+  });
+
+  it('search/traceId: reject a NUL byte but accept literal backslash-u text', () => {
+    bad({ search: 'a\u0000b' });
+    bad({ traceId: 'a\u0000b' });
+    expect(ok({ search: 'a\\u0000b' }).success).toBe(true);
+    expect(ok({ traceId: 'a\\u0000b' }).success).toBe(true);
+  });
+
+  describe('the shared rules reach every endpoint schema', () => {
+    const schemas = { list: listLogsQuerySchema, stats: logStatsQuerySchema, analyze: analyzeBodySchema };
+
+    it.each(Object.entries(schemas))('%s rejects out-of-range serviceId and NUL bytes', (_name, endpoint) => {
+      for (const input of [{ serviceId: '2147483648' }, { search: 'a\u0000b' }, { traceId: 'a\u0000b' }]) {
+        expect(endpoint.safeParse(input).success).toBe(false);
+      }
+      expect(endpoint.safeParse({ serviceId: '2147483647' }).success).toBe(true);
+    });
   });
 });
