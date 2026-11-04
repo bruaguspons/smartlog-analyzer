@@ -1,17 +1,17 @@
+import { randomUUIDv7 } from 'node:crypto';
+import { runSeed } from './run-seed.js';
+import { seedLogs } from './modules/logs/infrastructure/seed-logs.js';
 import { seedServices } from './modules/services/infrastructure/seed-services.js';
 import { loadConfig } from './shared/config/env.js';
 import { createPrismaClient } from './shared/db/prisma-client.js';
 
-const config = loadConfig(process.env);
-
-if (config.seedOnStart) {
-  const prisma = createPrismaClient(config.databaseUrl);
-  try {
+await runSeed(loadConfig(process.env), {
+  createPrisma: createPrismaClient,
+  seed: async (prisma) => {
     await seedServices(prisma);
-    console.log('Seed completed');
-  } finally {
-    await prisma.$disconnect();
-  }
-} else {
-  console.log('SEED_ON_START is false, skipping seed');
-}
+    return seedLogs(prisma, { newId: randomUUIDv7, now: () => new Date() });
+  },
+  log: (message) => {
+    console.log(message);
+  },
+});

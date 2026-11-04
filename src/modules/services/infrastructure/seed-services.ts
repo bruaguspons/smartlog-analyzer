@@ -1,6 +1,6 @@
 import type { PrismaClient } from '../../../shared/db/generated/client.js';
 
-/** Fixed development keys, documented in the README. Never use them outside local dev. */
+/** Fixed development keys, documented in docs/ejemplos-api.md. Never use them outside local dev. */
 export const DEV_SERVICES = [
   { name: 'payments-api', description: 'Dev service (active)', apiKey: 'dev-key-payments-0001', isActive: true },
   { name: 'orders-api', description: 'Dev service (active)', apiKey: 'dev-key-orders-0002', isActive: true },
