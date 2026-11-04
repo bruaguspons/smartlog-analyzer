@@ -1,4 +1,12 @@
-import { markInternalError, processAnalysis, type AnalysisJob, type JobLog, type ProcessDeps } from './process-analysis.js';
+import {
+  AnalysisProcessingError,
+  markInternalError,
+  processAnalysis,
+  type AnalysisJob,
+  type JobLog,
+  type PartialOutcome,
+  type ProcessDeps,
+} from './process-analysis.js';
 
 interface InFlight {
   controller: AbortController;
@@ -46,15 +54,17 @@ export class AnalysisRunner {
 
   private async run(job: AnalysisJob, signal: AbortSignal, log: JobLog): Promise<void> {
     let settled = false;
+    let partial: PartialOutcome | undefined;
     try {
       await processAnalysis(job, this.deps, signal, log);
       settled = true;
     } catch (error) {
+      if (error instanceof AnalysisProcessingError) partial = error.partial;
       log.error({ err: error, analysisId: job.analysisId }, 'analysis job failed unexpectedly');
     } finally {
       if (!settled) {
         try {
-          await markInternalError(job, this.deps);
+          await markInternalError(job, this.deps, partial);
         } catch (error) {
           // Nothing else can be done here; startup recovery closes the row if the process dies first.
           log.error({ err: error, analysisId: job.analysisId }, 'could not record the analysis failure');

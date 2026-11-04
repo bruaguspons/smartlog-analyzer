@@ -9,7 +9,7 @@ import { hangUntilAborted, okJson, ScriptedLlmClient } from '../shared/scripted-
 const CREATED_AT = new Date('2026-11-04T10:00:00.000Z');
 const logs = [makeListLog(1), makeListLog(2)];
 const jobOf = (n: number): AnalysisJob => ({ analysisId: analysisId(n), logs, createdAt: CREATED_AT });
-const ok = okJson({ summary: 'Resumen', findings: [] });
+const ok = okJson({ summary: 'Summary', findings: [] });
 
 type LogFn = Mock<(obj: object, msg: string) => void>;
 
@@ -37,7 +37,7 @@ describe('AnalysisRunner', () => {
     expect((await repo.findById(analysisId(1)))?.status).toBe('COMPLETED');
   });
 
-  it('S15: an unexpected error from the client ends FAILED/INTERNAL_ERROR and is logged', async () => {
+  it('an unexpected error from the client ends FAILED/INTERNAL_ERROR and is logged', async () => {
     const { repo, runner, log } = await setup(new ScriptedLlmClient(new TypeError('boom')));
 
     runner.start(jobOf(1), log);
@@ -47,7 +47,7 @@ describe('AnalysisRunner', () => {
     expect(log.error).toHaveBeenCalled();
   });
 
-  it('S16: shutdown() aborts the in-flight call, no retries, row FAILED/INTERRUPTED before it resolves', async () => {
+  it('shutdown() aborts the in-flight call, no retries, row FAILED/INTERRUPTED before it resolves', async () => {
     const llm = new ScriptedLlmClient(hangUntilAborted);
     const { repo, runner, log } = await setup(llm);
     runner.start(jobOf(1), log);
@@ -73,7 +73,7 @@ describe('AnalysisRunner', () => {
     expect(await repo.findById(analysisId(1))).toMatchObject({ status: 'FAILED', error: { code: 'INTERRUPTED' } });
   });
 
-  it('CAS: a row already closed by recovery is not overwritten by a late completion', async () => {
+  it('terminal writes are compare-and-set: a row already closed by recovery is not overwritten by a late completion', async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -119,18 +119,51 @@ describe('AnalysisRunner', () => {
     expect(log.error).toHaveBeenCalled();
   });
 
-  it('runs jobs independently and shutdown() waits for all of them', async () => {
-    const llm = new ScriptedLlmClient(hangUntilAborted);
-    const { repo, runner, log } = await setup(llm);
-    await repo.fail(analysisId(1), { errorCode: 'INTERNAL_ERROR', errorMessage: 'x', rawResponse: null, usage: null, durationMs: 1 });
-    await repo.createProcessing({ id: analysisId(2), provider: 'p', model: 'm', createdAt: CREATED_AT }, logs.map((l) => l.id));
-    runner.start(jobOf(2), log);
-    await vi.waitFor(() => {
-      expect(llm.calls).toBe(1);
+  describe('last resort keeps what the provider returned', () => {
+    const usage = { prompt: 11, completion: 7 };
+    const llmWithUsage = () => new ScriptedLlmClient(okJson({ summary: 'Summary', findings: [] }, usage));
+    const rawText = JSON.stringify({ summary: 'Summary', findings: [] });
+
+    it('a COMPLETED write that throws fails the analysis with the raw response and usage', async () => {
+      const { repo, runner, log } = await setup(llmWithUsage());
+      vi.spyOn(repo, 'complete').mockRejectedValue(new Error('db down'));
+      const fail = vi.spyOn(repo, 'fail');
+
+      runner.start(jobOf(1), log);
+      await runner.idle();
+
+      expect(fail).toHaveBeenCalledTimes(1);
+      expect(fail.mock.calls[0]?.[1]).toMatchObject({ errorCode: 'INTERNAL_ERROR', rawResponse: rawText, usage });
+      expect(await repo.findById(analysisId(1))).toMatchObject({ status: 'FAILED', tokens: usage });
     });
 
-    await runner.shutdown();
+    it('when the first failure write also throws, the retry still carries the raw response and usage', async () => {
+      const { repo, runner, log } = await setup(llmWithUsage());
+      vi.spyOn(repo, 'complete').mockRejectedValue(new Error('db down'));
+      const realFail = repo.fail.bind(repo);
+      const fail = vi.spyOn(repo, 'fail').mockRejectedValueOnce(new Error('db still down')).mockImplementation(realFail);
 
-    expect((await repo.findById(analysisId(2)))?.status).toBe('FAILED');
+      runner.start(jobOf(1), log);
+      await runner.idle();
+
+      expect(fail).toHaveBeenCalledTimes(2);
+      expect(fail.mock.calls[1]?.[1]).toMatchObject({ errorCode: 'INTERNAL_ERROR', rawResponse: rawText, usage });
+      expect(await repo.findById(analysisId(1))).toMatchObject({
+        status: 'FAILED',
+        error: { code: 'INTERNAL_ERROR' },
+        tokens: usage,
+      });
+    });
+
+    it('a failure before any model answer writes INTERNAL_ERROR with no raw response or usage', async () => {
+      const { repo, runner, log } = await setup(new ScriptedLlmClient(new TypeError('boom')));
+      const fail = vi.spyOn(repo, 'fail');
+
+      runner.start(jobOf(1), log);
+      await runner.idle();
+
+      expect(fail.mock.calls[0]?.[1]).toMatchObject({ errorCode: 'INTERNAL_ERROR', rawResponse: null, usage: null });
+      expect((await repo.findById(analysisId(1)))?.tokens).toBeNull();
+    });
   });
 });

@@ -38,11 +38,28 @@ function durationSince(job: AnalysisJob, deps: ProcessDeps): number {
   return Math.max(0, deps.now().getTime() - job.createdAt.getTime());
 }
 
+/** What the provider returned before processing broke down; kept so the last-resort write can still persist it. */
+export interface PartialOutcome {
+  rawResponse: string | null;
+  usage: TokenUsage | null;
+}
+
+/** Thrown when a failure after the model answered could not be recorded; carries the answer for the runner's retry. */
+export class AnalysisProcessingError extends Error {
+  readonly partial: PartialOutcome;
+
+  constructor(partial: PartialOutcome, cause: unknown) {
+    super('analysis processing failed and the failure could not be recorded', { cause });
+    this.name = 'AnalysisProcessingError';
+    this.partial = partial;
+  }
+}
+
 /** Compare-and-set to FAILED/INTERNAL_ERROR; also the last-resort write of the runner's `finally`. */
 export function markInternalError(
   job: AnalysisJob,
   deps: ProcessDeps,
-  partial: { rawResponse: string | null; usage: TokenUsage | null } = { rawResponse: null, usage: null },
+  partial: PartialOutcome = { rawResponse: null, usage: null },
 ): Promise<boolean> {
   return deps.repo.fail(job.analysisId, {
     errorCode: 'INTERNAL_ERROR',
@@ -125,6 +142,10 @@ export async function processAnalysis(
   } catch (error) {
     log.error({ err: error, analysisId: job.analysisId }, 'analysis processing failed');
     // Keep what the provider returned: the raw answer and token usage are worth having even on failure.
-    await markInternalError(job, deps, { rawResponse, usage });
+    try {
+      await markInternalError(job, deps, { rawResponse, usage });
+    } catch (writeError) {
+      throw new AnalysisProcessingError({ rawResponse, usage }, writeError);
+    }
   }
 }
