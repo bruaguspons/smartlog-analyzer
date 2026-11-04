@@ -1,47 +1,64 @@
 # smartlog-analyzer
 
-Log ingestion and AI analysis service (Abstracta challenge). Design decisions live in `ARCHITECTURE.md`.
+[![CI](https://github.com/bruaguspons/smartlog-analyzer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bruaguspons/smartlog-analyzer/actions/workflows/ci.yml)
+![Node.js](https://img.shields.io/badge/Node.js-24-5FA04E?logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)
 
-## Setup
+Servicio de ingesta de logs y análisis con IA (desafío de Abstracta). Los microservicios envían sus logs por HTTP, se consultan con filtros y paginado por cursor, y un LLM (mock por defecto, Gemini opcional) detecta problemas sobre una página de logs.
+
+## Documentación
+
+| Documento                                                                | Contenido                                                                             |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [ARCHITECTURE.md](ARCHITECTURE.md)                                       | Decisiones técnicas, alternativas descartadas y manejo de fallas.                     |
+| [docs/MER.md](docs/MER.md)                                               | Modelo de datos (MER, modelo entidad-relación): diagrama, columnas, claves e índices. |
+| [docs/ejemplos-api.md](docs/ejemplos-api.md)                             | Ejemplos de requests, uso de Swagger UI y API keys de desarrollo.                     |
+| [docs/diagrams/components.md](docs/diagrams/components.md)               | Vista de componentes.                                                                 |
+| [docs/diagrams/analysis-sequence.md](docs/diagrams/analysis-sequence.md) | Secuencia del análisis.                                                               |
+| [docs/diagrams/containers.md](docs/diagrams/containers.md)               | Contenedores y red.                                                                   |
+
+## Requisitos
+
+- Node.js 24.16 o superior y npm.
+- Docker: para `docker compose up` y para los tests de integración.
+
+## Instalación
 
 ```sh
-docker compose up
+cp .env.example .env
+docker compose up -d --build
 ```
 
-Starts Postgres and the app on `http://localhost:3000`. On boot the container runs `prisma migrate deploy`, then the idempotent seed (skipped when `SEED_ON_START=false`), then the server. The database port is not published to the host; it is only reachable inside the `smartlog-net` network. Defaults come from `docker-compose.yml`; `.env.example` lists every variable.
+Levanta Postgres y la aplicación en `http://localhost:3000`. Los valores por defecto salen de `docker-compose.yml`; todas las variables están en `.env.example` y se describen en [Variables de entorno](ARCHITECTURE.md#variables-de-entorno).
 
-### Local development without Docker for the app
-
-`npm run dev` needs its own Postgres because compose does not publish 5432:
+El LLM por defecto es un mock determinista y no necesita key. Para usar Gemini, se cambian estas variables en `.env` y se vuelve a levantar con `docker compose up -d`:
 
 ```sh
-docker run -d --name smartlog-dev-db -p 5432:5432 -e POSTGRES_PASSWORD=smartlog \
-  -e POSTGRES_USER=smartlog -e POSTGRES_DB=smartlog postgres:17-alpine
-cp .env.example .env   # DATABASE_URL already points to localhost:5432
-npm install && npm run db:migrate && npm run db:seed && npm run dev
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=<api-key>
 ```
 
-### Seeded dev keys (send as `X-API-Key`)
+## Uso de la API
 
-| Service | Key | State |
-|---|---|---|
-| payments-api | `dev-key-payments-0001` | active |
-| orders-api | `dev-key-orders-0002` | active |
-| legacy-batch | `dev-key-legacy-0003` | inactive (401) |
+La documentación OpenAPI interactiva está en `/docs` (puerto 3000). Las rutas de la API, salvo `GET /api/health`, requieren el header `X-API-Key`. Los ejemplos de requests y las keys de desarrollo están en [docs/ejemplos-api.md](docs/ejemplos-api.md).
 
-## Tests
+## Pruebas
 
-- `npm test`: unit tests, no Docker needed.
-- `npm run test:integration`: starts Postgres with Testcontainers (Docker required) and runs the repository and seed tests against the real migration.
+- `npm test`: tests unitarios, sin Docker.
+- `npm run test:integration`: Postgres real con Testcontainers (requiere Docker); aplica las migraciones y falla si difieren de `db/schema.prisma`.
+- `npm run lint` y `npm run typecheck`: análisis estático.
 
-## How AI was used
+## Cómo se usó la IA
 
-Claude Code drafted the SDD artifacts and implementation for the Postgres/Docker slice. Rejected or corrected: a floating `prisma@latest` (an 8.x release candidate) in favour of the pinned 7.x line, and relaxing compiler flags to fit generated code (it was not needed).
+Claude Code fue el asistente durante todo el proyecto. El autor definió el alcance y las decisiones de `ARCHITECTURE.md` y revisó cada cambio.
 
-## Left out
+## Trabajo a futuro
 
-`logs`, `analyses` and N:M tables, the single in-flight analysis index (D15), startup recovery of `PROCESSING` rows, and `GET /api/health`. Each arrives with its first consumer.
+- Los análisis corren en el mismo proceso, y un reinicio pierde los que están en curso: se resolvería con una cola persistente.
+- Las API keys están en texto plano y sin rotación: se guardaría un hash y se permitirían varias keys por servicio.
+- No hay autorización por recurso: cualquier servicio lee los logs de todos. Se restringirían las lecturas al propio servicio o a roles de lectura.
+- No hay rate limiting ni ingesta por lotes: se agregaría un endpoint de lotes y `@fastify/rate-limit` por API key.
+- No hay política de retención de logs: se particionaría `logs` por fecha.
+- La observabilidad se limita al log estructurado: se agregarían métricas y trazas.
 
-## Not yet verified (needs Docker)
-
-`docker compose up`, `npm run test:integration`, `docker stop` graceful shutdown, `SEED_ON_START=false`, and a bad `DATABASE_URL` aborting startup. See the change's verification checklist.
+El detalle de cada limitación y de cómo evolucionaría está en [Limitaciones y evolución](ARCHITECTURE.md#limitaciones-y-evolución).
