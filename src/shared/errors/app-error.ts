@@ -31,3 +31,15 @@ export class ServiceUnavailableError extends AppError {
     super(503, 'SERVICE_UNAVAILABLE', message, details);
   }
 }
+
+export class ConflictError extends AppError {
+  constructor(code: string, message: string, details?: unknown) {
+    super(409, code, message, details);
+  }
+}
+
+export class UnprocessableError extends AppError {
+  constructor(code: string, message: string) {
+    super(422, code, message);
+  }
+}
