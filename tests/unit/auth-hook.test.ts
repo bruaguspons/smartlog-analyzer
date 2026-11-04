@@ -15,7 +15,7 @@ const off: Service = { id: 8, name: 'off', description: null, apiKey: 'k-off', i
 function spiedRepo(services: Service[] = [active, off]) {
   const inner = new InMemoryServiceRepository(services);
   const findByApiKey = vi.fn((key: string) => inner.findByApiKey(key));
-  return { repo: { findByApiKey } satisfies ServiceRepository, findByApiKey };
+  return { repo: { findByApiKey, findNamesByIds: (ids: readonly number[]) => inner.findNamesByIds(ids) } satisfies ServiceRepository, findByApiKey };
 }
 
 describe('auth hook (/api scope)', () => {
@@ -145,7 +145,10 @@ describe('auth hook (/api scope)', () => {
   });
 
   it('repository failure is fail-closed: 500 INTERNAL_ERROR, nothing leaked', async () => {
-    const repo: ServiceRepository = { findByApiKey: () => Promise.reject(new Error('db password=secret')) };
+    const repo: ServiceRepository = {
+      findByApiKey: () => Promise.reject(new Error('db password=secret')),
+      findNamesByIds: () => Promise.resolve(new Map()),
+    };
     const res = await build(repo).inject({ method: 'GET', url: '/api/p', headers: { 'x-api-key': 'k' } });
     expect(res.statusCode).toBe(500);
     expect(res.json<{ error: { code: string } }>().error.code).toBe('INTERNAL_ERROR');

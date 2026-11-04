@@ -5,7 +5,7 @@ import type { ServiceRepository } from '../../src/modules/services/domain/servic
 import { HEALTH_DB_TIMEOUT_MS } from '../../src/shared/http/health-route.js';
 
 const findByApiKey = vi.fn(() => Promise.resolve(null));
-const repo: ServiceRepository = { findByApiKey };
+const repo: ServiceRepository = { findByApiKey, findNamesByIds: () => Promise.resolve(new Map()) };
 
 describe('GET /api/health', () => {
   let app: FastifyInstance;

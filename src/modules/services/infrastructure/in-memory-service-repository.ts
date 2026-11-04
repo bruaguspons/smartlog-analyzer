@@ -11,4 +11,9 @@ export class InMemoryServiceRepository implements ServiceRepository {
   findByApiKey(apiKey: string): Promise<Service | null> {
     return Promise.resolve(this.services.find((s) => s.apiKey === apiKey) ?? null);
   }
+
+  findNamesByIds(ids: readonly number[]): Promise<Map<number, string>> {
+    const wanted = new Set(ids);
+    return Promise.resolve(new Map(this.services.filter((s) => wanted.has(s.id)).map((s) => [s.id, s.name])));
+  }
 }

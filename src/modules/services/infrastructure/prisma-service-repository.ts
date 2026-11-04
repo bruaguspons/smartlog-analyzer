@@ -16,4 +16,13 @@ export class PrismaServiceRepository implements ServiceRepository {
       select: { id: true, name: true, description: true, apiKey: true, isActive: true },
     });
   }
+
+  async findNamesByIds(ids: readonly number[]): Promise<Map<number, string>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.prisma.service.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true },
+    });
+    return new Map(rows.map((r) => [r.id, r.name]));
+  }
 }

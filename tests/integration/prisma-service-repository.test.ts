@@ -54,6 +54,24 @@ describe('PrismaServiceRepository', () => {
   });
 });
 
+describe('PrismaServiceRepository.findNamesByIds', () => {
+  it('returns an empty map for no ids', async () => {
+    expect((await repository.findNamesByIds([])).size).toBe(0);
+  });
+
+  it('resolves existing ids (inactive included), omits unknown ones and tolerates duplicates', async () => {
+    await prisma.service.create({ data: { name: 'a', apiKey: 'k1' } });
+    await prisma.service.create({ data: { name: 'b', apiKey: 'k2', isActive: false } });
+
+    expect(await repository.findNamesByIds([1, 2, 2, 99])).toEqual(
+      new Map([
+        [1, 'a'],
+        [2, 'b'],
+      ]),
+    );
+  });
+});
+
 describe('seedServices', () => {
   it('is idempotent: two runs leave exactly 3 services (2 active, 1 inactive)', async () => {
     await seedServices(prisma);

@@ -9,7 +9,7 @@ const inactive: Service = { ...active, id: 2, apiKey: 'k-off', isActive: false }
 
 function repoReturning(service: Service | null) {
   const findByApiKey = vi.fn<(key: string) => Promise<Service | null>>().mockResolvedValue(service);
-  return { repo: { findByApiKey } satisfies ServiceRepository, findByApiKey };
+  return { repo: { findByApiKey, findNamesByIds: () => Promise.resolve(new Map()) } satisfies ServiceRepository, findByApiKey };
 }
 
 describe('authenticate', () => {

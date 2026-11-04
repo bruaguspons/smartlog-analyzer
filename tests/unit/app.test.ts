@@ -8,7 +8,7 @@ import type { ServiceRepository } from '../../src/modules/services/domain/servic
 const dbOk = () => Promise.resolve();
 
 const findByApiKey = vi.fn(() => Promise.resolve(null));
-const repo: ServiceRepository = { findByApiKey };
+const repo: ServiceRepository = { findByApiKey, findNamesByIds: () => Promise.resolve(new Map()) };
 
 const apiRoutes: FastifyPluginAsyncZod = (api) => {
   api.post('/echo', { schema: { body: z.object({ message: z.string() }) } }, (req) => req.body);
