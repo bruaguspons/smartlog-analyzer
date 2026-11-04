@@ -8,6 +8,7 @@ coverage
 src/shared/db/generated
 tests
 docs
+# Local configuration of AI coding assistants (Claude Code and its skills), not part of the project
 .claude
 .agents
 .atl

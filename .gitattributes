@@ -1,0 +1,14 @@
+# Normalize line endings: store LF in the repo and check out LF on every OS.
+# Prevents CRLF from breaking shell scripts in the container (e.g. docker/entrypoint.sh)
+# and avoids noisy diffs between Windows and Unix contributors.
+* text=auto eol=lf
+
+# Must stay LF regardless of platform (executed inside Linux containers).
+*.sh text eol=lf
+Dockerfile text eol=lf
+
+# Binary files: never normalize or diff as text.
+*.pdf binary
+*.jpg binary
+*.jpeg binary
+*.png binary

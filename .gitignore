@@ -7,6 +7,7 @@ coverage/
 *.log
 .DS_Store
 
+# Local configuration of AI coding assistants (Claude Code and its skills), not part of the project
 .agents
 .atl
 .claude
