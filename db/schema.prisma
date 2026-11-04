@@ -3,6 +3,8 @@ generator client {
   output              = "../src/shared/db/generated"
   importFileExtension = "js"
   moduleFormat        = "esm"
+  // Needed for the partial unique index on analyses (single in-flight analysis, D15).
+  previewFeatures     = ["partialIndexes"]
 }
 
 datasource db {
@@ -31,18 +33,117 @@ enum LogLevel {
 }
 
 model Log {
-  id        String   @id @db.Uuid
-  serviceId Int      @map("service_id")
+  id        String        @id @db.Uuid
+  serviceId Int           @map("service_id")
   level     LogLevel
-  timestamp DateTime @db.Timestamptz(3)
+  timestamp DateTime      @db.Timestamptz(3)
   message   String
-  traceId   String?  @map("trace_id")
+  traceId   String?       @map("trace_id")
   metadata  Json?
-  service   Service  @relation(fields: [serviceId], references: [id])
+  service   Service       @relation(fields: [serviceId], references: [id])
+  analyses  AnalysisLog[]
+  findings  FindingLog[]
 
   @@index([timestamp(sort: Desc), id(sort: Desc)], map: "logs_timestamp_id_idx")
   @@index([serviceId, timestamp(sort: Desc), id(sort: Desc)], map: "logs_service_id_timestamp_id_idx")
   @@index([level, timestamp(sort: Desc)], map: "logs_level_timestamp_idx")
   @@index([traceId], map: "logs_trace_id_idx")
   @@map("logs")
+}
+
+enum AnalysisStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@map("analysis_status")
+}
+
+enum AnalysisFindingCategory {
+  DATABASE
+  NETWORK
+  TIMEOUT
+  EXTERNAL_DEPENDENCY
+  AUTHENTICATION
+  VALIDATION
+  RESOURCE_EXHAUSTION
+  PERFORMANCE
+  CONFIGURATION
+  APPLICATION_ERROR
+  SECURITY
+  DATA_INTEGRITY
+  OTHER
+
+  @@map("analysis_finding_category")
+}
+
+enum AnalysisFindingSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@map("analysis_finding_severity")
+}
+
+model Analysis {
+  /// UUIDv7 assigned by the application.
+  id               String            @id @db.Uuid
+  status           AnalysisStatus
+  provider         String
+  model            String
+  rawResponse      String?           @map("raw_response")
+  summary          String?
+  /// Plain string in the database; the closed set lives in the domain (AnalysisErrorCode).
+  errorCode        String?           @map("error_code")
+  errorMessage     String?           @map("error_message")
+  /// Int instead of the MER's Long: BigInt does not serialize to JSON.
+  promptTokens     Int?              @map("prompt_tokens")
+  completionTokens Int?              @map("completion_tokens")
+  createdAt        DateTime          @map("created_at") @db.Timestamptz(3)
+  /// Set when the analysis reaches a terminal state; null while PROCESSING.
+  durationMs       Int?              @map("duration_ms")
+  logs             AnalysisLog[]
+  findings         AnalysisFinding[]
+
+  /// At most one row can be PROCESSING at a time (D15).
+  @@unique([status], map: "analyses_single_processing", where: raw("status = 'PROCESSING'"))
+  @@map("analyses")
+}
+
+model AnalysisLog {
+  analysisId String   @map("analysis_id") @db.Uuid
+  logId      String   @map("log_id") @db.Uuid
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  log        Log      @relation(fields: [logId], references: [id])
+
+  @@id([analysisId, logId])
+  @@index([logId], map: "analysis_logs_log_id_idx")
+  @@map("analysis_logs")
+}
+
+model AnalysisFinding {
+  /// Int instead of the MER's Long: BigInt does not serialize to JSON.
+  id          Int                     @id @default(autoincrement())
+  analysisId  String                  @map("analysis_id") @db.Uuid
+  category    AnalysisFindingCategory
+  severity    AnalysisFindingSeverity
+  description String
+  /// JSON array of strings.
+  suggestions Json
+  analysis    Analysis                @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  logs        FindingLog[]
+
+  @@index([analysisId], map: "analysis_findings_analysis_id_idx")
+  @@map("analysis_findings")
+}
+
+model FindingLog {
+  findingId Int             @map("finding_id")
+  logId     String          @map("log_id") @db.Uuid
+  finding   AnalysisFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  log       Log             @relation(fields: [logId], references: [id])
+
+  @@id([findingId, logId])
+  @@map("finding_logs")
 }
