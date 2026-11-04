@@ -40,5 +40,9 @@ model Log {
   metadata  Json?
   service   Service  @relation(fields: [serviceId], references: [id])
 
+  @@index([timestamp(sort: Desc), id(sort: Desc)], map: "logs_timestamp_id_idx")
+  @@index([serviceId, timestamp(sort: Desc), id(sort: Desc)], map: "logs_service_id_timestamp_id_idx")
+  @@index([level, timestamp(sort: Desc)], map: "logs_level_timestamp_idx")
+  @@index([traceId], map: "logs_trace_id_idx")
   @@map("logs")
 }
