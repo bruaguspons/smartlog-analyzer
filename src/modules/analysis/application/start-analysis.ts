@@ -22,8 +22,8 @@ export interface StartedAnalysis {
 }
 
 /**
- * Analyzes exactly one page of the filtered logs. Order matters (ARCHITECTURE 3.2): an empty page is
- * rejected before anything is written, and the single-in-flight rule (D15) is decided by the insert itself.
+ * Analyzes exactly one page of the filtered logs. Order matters: an empty page is rejected before
+ * anything is written, and the single-in-flight rule is decided by the insert itself.
  */
 export async function startAnalysis(query: ListLogsQuery, log: JobLog, deps: StartAnalysisDeps): Promise<StartedAnalysis> {
   const page = await listLogs(query, { repo: deps.logRepo });

@@ -1,7 +1,7 @@
 export const ANALYSIS_STATUSES = ['PROCESSING', 'COMPLETED', 'FAILED'] as const;
 export type AnalysisStatus = (typeof ANALYSIS_STATUSES)[number];
 
-/** Closed set of persisted failure codes (ARCHITECTURE 6.2); stored as a plain string in the database. */
+/** Closed set of persisted failure codes, documented in ARCHITECTURE.md under "Llamada al LLM"; stored as a plain string in the database. */
 export const ANALYSIS_ERROR_CODES = [
   'LLM_TIMEOUT',
   'LLM_RATE_LIMITED',

@@ -19,7 +19,7 @@ function matchEnum<T extends string>(values: readonly T[], raw: string): T | und
 }
 
 /**
- * D10: a structurally valid response with odd content is tolerated. Unknown category -> OTHER,
+ * A structurally valid response with odd content is tolerated. Unknown category -> OTHER,
  * unknown severity -> MEDIUM (warning), refs outside 1..N are dropped and valid ones mapped to log ids.
  * `logIds[i]` is the id of the log that was sent as number i + 1.
  */

@@ -27,7 +27,7 @@ function toDomain(row: LogRow): Log {
 /** Filter-to-where translation shared by every query so list and stats cannot drift. */
 function buildWhere(filters: LogFilters): LogWhereInput {
   const { serviceId, level, from, to, traceId, search } = filters;
-  // Keys are added only when defined (exactOptionalPropertyTypes).
+  // Only filters that are set become conditions; an absent filter adds no key.
   return {
     ...(serviceId !== undefined && { serviceId }),
     ...(level !== undefined && { level: { in: [...level] } }),

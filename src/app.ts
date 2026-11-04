@@ -8,7 +8,7 @@ import type { LogLevel } from './shared/config/env.js';
 import { registerErrorHandling } from './shared/http/error-handler.js';
 import { healthRoute, type DatabaseCheck } from './shared/http/health-route.js';
 
-const BODY_LIMIT_BYTES = 1_048_576; // 1 MiB, the 413 limit of ARCHITECTURE.md 6.1
+const BODY_LIMIT_BYTES = 1_048_576; // 1 MiB; larger bodies get 413 PAYLOAD_TOO_LARGE
 
 export interface BuildAppOptions {
   /** Required: auth is always on (fail-closed by type). */

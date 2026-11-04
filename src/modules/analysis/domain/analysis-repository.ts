@@ -24,7 +24,7 @@ export interface FailInput {
 export interface AnalysisRepository {
   /**
    * Inserts the analysis as PROCESSING together with its logs, atomically.
-   * At most one analysis can be PROCESSING: the store enforces it (D15), not a prior check.
+   * At most one analysis can be PROCESSING: the store enforces it, not a prior check, so two concurrent requests cannot both pass.
    */
   createProcessing(analysis: NewAnalysis, logIds: readonly string[]): Promise<CreateProcessingOutcome>;
   /**

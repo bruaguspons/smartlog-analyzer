@@ -78,7 +78,7 @@ export class PrismaAnalysisRepository implements AnalysisRepository {
       return { created: true };
     } catch (error) {
       // The partial unique index is the only unique constraint besides the primary key, so any
-      // P2002 means another analysis is PROCESSING (D15).
+      // P2002 means another analysis is PROCESSING.
       if (!isUniqueViolation(error)) throw error;
       const running = await this.prisma.analysis.findFirst({ where: { status: 'PROCESSING' }, select: { id: true } });
       return { created: false, runningId: running?.id ?? null };

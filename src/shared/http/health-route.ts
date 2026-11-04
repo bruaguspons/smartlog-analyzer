@@ -23,7 +23,7 @@ function withTimeout(check: DatabaseCheck, ms: number): Promise<void> {
 
 /**
  * `GET /health`, registered with the `/api` prefix outside the authenticated scope (public).
- * 503 uses the standard error envelope (ARCHITECTURE.md 6.1) with the database state in `details`.
+ * 503 uses the standard error envelope with the database state in `details`.
  */
 export const healthRoute: FastifyPluginAsyncZod<HealthRouteOptions> = (app, opts) => {
   const timeoutMs = opts.timeoutMs ?? HEALTH_DB_TIMEOUT_MS;

@@ -54,7 +54,7 @@ export function createLogsRoutes(deps: LogsRoutesDeps): FastifyPluginAsyncZod {
         return listLogs({ filters, limit, cursor }, deps);
       },
     );
-    // Registered next to `/logs`; any future `/logs/:id` must come after it.
+    // Static path: find-my-way matches it before any parametric /logs/:id, whatever the registration order.
     api.get(
       '/logs/stats',
       {

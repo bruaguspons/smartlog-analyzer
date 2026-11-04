@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { FINDING_CATEGORIES, FINDING_SEVERITIES } from '../domain/analysis.js';
 
 /**
- * Tolerant shape used to VALIDATE the model output (D10): the structure is strict,
+ * Tolerant shape used to VALIDATE the model output: the structure is strict,
  * the content is not. Category and severity are free strings here and normalized later.
  */
 export const llmResponseSchema = z.object({
