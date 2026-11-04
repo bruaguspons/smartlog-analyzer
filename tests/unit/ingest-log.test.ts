@@ -35,7 +35,7 @@ describe('ingestLog', () => {
 
   it('calls repo.create exactly once', async () => {
     const create = vi.fn((l: Log) => Promise.resolve(l));
-    const repo: LogRepository = { create };
+    const repo: LogRepository = { create, list: () => Promise.reject(new Error('not used')) };
 
     await ingestLog(base, { repo, newId: () => 'X' });
 
@@ -43,7 +43,10 @@ describe('ingestLog', () => {
   });
 
   it('propagates repository errors', async () => {
-    const repo: LogRepository = { create: () => Promise.reject(new Error('db down')) };
+    const repo: LogRepository = {
+      create: () => Promise.reject(new Error('db down')),
+      list: () => Promise.reject(new Error('not used')),
+    };
 
     await expect(ingestLog(base, { repo, newId: () => 'X' })).rejects.toThrow('db down');
   });

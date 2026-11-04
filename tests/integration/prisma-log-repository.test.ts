@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'v
 import type { Log } from '../../src/modules/logs/domain/log.js';
 import { PrismaLogRepository } from '../../src/modules/logs/infrastructure/prisma-log-repository.js';
 import { createPrismaClient } from '../../src/shared/db/prisma-client.js';
+import { runLogListContract } from '../shared/log-repository-list-contract.js';
 
 const prisma = createPrismaClient(inject('databaseUrl'));
 const repository = new PrismaLogRepository(prisma);
@@ -61,4 +62,16 @@ describe('PrismaLogRepository', () => {
 
     expect(rows).toEqual([{ trace_id: null, metadata: null }]);
   });
+});
+
+runLogListContract(async () => {
+  await prisma.$executeRaw`TRUNCATE logs, services RESTART IDENTITY CASCADE`;
+  await prisma.service.create({ data: { name: 'svc-1', apiKey: 'key-1' } });
+  await prisma.service.create({ data: { name: 'svc-2', apiKey: 'key-2' } });
+  return {
+    repo: repository,
+    seed: async (logs) => {
+      for (const log of logs) await repository.create(log);
+    },
+  };
 });

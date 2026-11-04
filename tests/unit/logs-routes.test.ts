@@ -7,6 +7,7 @@ import { InMemoryLogRepository } from '../../src/modules/logs/infrastructure/in-
 import type { Service } from '../../src/modules/services/domain/service.js';
 import { InMemoryServiceRepository } from '../../src/modules/services/infrastructure/in-memory-service-repository.js';
 import { randomUUIDv7 } from 'node:crypto';
+import { makeListLog } from '../shared/log-repository-list-contract.js';
 
 const ID = '0192f1c0-0000-7000-8000-000000000001';
 const NOW = new Date('2026-11-03T12:00:00.000Z');
@@ -142,7 +143,10 @@ describe('POST /api/logs', () => {
   });
 
   it('500 on repository failure without leaking internals', async () => {
-    build({ create: () => Promise.reject(new Error('secret db detail')) });
+    build({
+      create: () => Promise.reject(new Error('secret db detail')),
+      list: () => Promise.reject(new Error('not used')),
+    });
     const res = await post(valid);
     expect(res.statusCode).toBe(500);
     expect(res.json()).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
@@ -153,5 +157,130 @@ describe('POST /api/logs', () => {
     build();
     await app.ready();
     expect(Object.keys(app.swagger().paths ?? {})).toContain('/api/logs');
+  });
+});
+
+describe('GET /api/logs', () => {
+  let app: FastifyInstance;
+  const A: Service = { id: 1, name: 'a', description: null, apiKey: 'k-a', isActive: true };
+  const B: Service = { id: 2, name: 'b', description: null, apiKey: 'k-b', isActive: true };
+  const OFF: Service = { id: 3, name: 'off', description: null, apiKey: 'k-off', isActive: false };
+  const keyA = { 'x-api-key': 'k-a' };
+
+  interface Page {
+    items: { id: string; serviceId: number; level: string }[];
+    nextCursor: string | null;
+    hasMore: boolean;
+    error: { code: string; details?: unknown[] };
+  }
+  const page = (res: { json: () => unknown }) => res.json() as Page;
+
+  async function build(count = 0, repo = new InMemoryLogRepository()) {
+    for (let n = 1; n <= count; n++) {
+      await repo.create(
+        makeListLog(n, { serviceId: n % 2 ? 1 : 2, level: n % 2 ? 'ERROR' : 'FATAL' }),
+      );
+    }
+    app = buildApp({
+      serviceRepository: new InMemoryServiceRepository([A, B, OFF]),
+      checkDatabase: () => Promise.resolve(),
+      apiRoutes: [createLogsRoutes({ repo, newId: () => ID, now: () => NOW })],
+      logLevel: 'silent',
+    });
+    return repo;
+  }
+  const get = (url: string, h: Record<string, string> = keyA) => app.inject({ method: 'GET', url, headers: h });
+
+  afterEach(() => app.close());
+
+  it('S1: 200 with exactly items/nextCursor/hasMore and the seven camelCase item keys', async () => {
+    await build(1);
+    const res = await get('/api/logs');
+    expect(res.statusCode).toBe(200);
+    expect(Object.keys(page(res)).sort()).toEqual(['hasMore', 'items', 'nextCursor']);
+    expect(Object.keys(page(res).items[0] ?? {}).sort()).toEqual(
+      ['id', 'level', 'message', 'metadata', 'serviceId', 'timestamp', 'traceId'],
+    );
+  });
+
+  it('S2: empty result', async () => {
+    await build();
+    const res = await get('/api/logs');
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ items: [], nextCursor: null, hasMore: false });
+  });
+
+  it('S5/S6: lists every service; serviceId only filters', async () => {
+    await build(4);
+    expect(page(await get('/api/logs')).items.map((i) => i.serviceId).sort()).toEqual([1, 1, 2, 2]);
+    expect(page(await get('/api/logs?serviceId=2')).items.map((i) => i.serviceId)).toEqual([2, 2]);
+  });
+
+  it('S17/S18: repeated and single level', async () => {
+    await build(4);
+    expect(page(await get('/api/logs?level=ERROR')).items).toHaveLength(2);
+    expect(page(await get('/api/logs?level=ERROR&level=FATAL')).items).toHaveLength(4);
+  });
+
+  it('S10: follows nextCursor until null', async () => {
+    await build(5);
+    const sizes: number[] = [];
+    const seen: string[] = [];
+    let url = '/api/logs?limit=2';
+    for (;;) {
+      const body = page(await get(url));
+      sizes.push(body.items.length);
+      seen.push(...body.items.map((i) => i.id));
+      if (!body.nextCursor) break;
+      url = `/api/logs?limit=2&cursor=${body.nextCursor}`;
+    }
+    expect(sizes).toEqual([2, 2, 1]);
+    expect(new Set(seen).size).toBe(5);
+  });
+
+  it('S3/S4: missing, unknown and inactive keys give the same 401, before validation', async () => {
+    await build();
+    const missing = await get('/api/logs?limit=0', {});
+    const unknown = await get('/api/logs', { 'x-api-key': 'nope' });
+    const inactive = await get('/api/logs', { 'x-api-key': 'k-off' });
+    expect(missing.statusCode).toBe(401);
+    expect(unknown.json()).toEqual(missing.json());
+    expect(inactive.json()).toEqual(missing.json());
+  });
+
+  it.each([
+    'limit=0',
+    'limit=201',
+    'limit=abc',
+    'cursor=!!!',
+    'cursor=',
+    'level=TRACE',
+    'from=2026-01-02T00:00:00Z&to=2026-01-01T00:00:00Z',
+    'foo=1',
+    'search=',
+    'traceId=',
+  ])('S39: %s is a 400 VALIDATION_ERROR with a details list', async (query) => {
+    await build();
+    const res = await get(`/api/logs?${query}`);
+    expect(res.statusCode).toBe(400);
+    expect(page(res).error.code).toBe('VALIDATION_ERROR');
+    expect(page(res).error.details?.length).toBeGreaterThan(0);
+  });
+
+  it('500 on repository failure without leaking internals', async () => {
+    const repo = new InMemoryLogRepository();
+    repo.list = () => Promise.reject(new Error('secret db detail'));
+    await build(0, repo);
+    const res = await get('/api/logs');
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
+  });
+
+  it('documents GET /api/logs in OpenAPI', async () => {
+    await build();
+    await app.ready();
+    const op = app.swagger().paths?.['/api/logs']?.get;
+    expect(op).toBeDefined();
+    expect(Object.keys(op?.responses ?? {})).toEqual(expect.arrayContaining(['200']));
   });
 });
