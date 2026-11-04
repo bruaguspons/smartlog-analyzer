@@ -7,7 +7,7 @@ import { InMemoryLogRepository } from '../../src/modules/logs/infrastructure/in-
 const base = { serviceId: 7, level: 'INFO', timestamp: new Date('2026-11-03T10:00:00Z'), message: 'hi' } as const;
 
 describe('ingestLog', () => {
-  it('S21: takes the id from newId and the serviceId from the command', async () => {
+  it('takes the id from newId and the serviceId from the command', async () => {
     const repo = new InMemoryLogRepository();
 
     const log = await ingestLog(base, { repo, newId: () => 'X' });

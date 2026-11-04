@@ -37,7 +37,7 @@ beforeEach(async () => {
 });
 
 describe('PrismaLogRepository', () => {
-  it('S24: round-trips every field, keeping milliseconds and nested metadata', async () => {
+  it('round-trips every field, keeping milliseconds and nested metadata', async () => {
     const log = makeLog();
 
     const created = await repository.create(log);
@@ -50,12 +50,12 @@ describe('PrismaLogRepository', () => {
     expect(stored.level).toBe('ERROR');
   });
 
-  it('S25: rejects an unknown serviceId with a foreign key violation', async () => {
-    await expect(repository.create(makeLog({ serviceId: 999 }))).rejects.toThrow();
+  it('rejects an unknown serviceId with a foreign key violation', async () => {
+    await expect(repository.create(makeLog({ serviceId: 999 }))).rejects.toThrow(/foreign key/i);
     expect(await prisma.log.count()).toBe(0);
   });
 
-  it('S26: stores SQL NULL for absent traceId and metadata', async () => {
+  it('stores SQL NULL for absent traceId and metadata', async () => {
     await repository.create(makeLog({ traceId: null, metadata: null }));
 
     const rows = await prisma.$queryRaw<{ trace_id: string | null; metadata: unknown }[]>`

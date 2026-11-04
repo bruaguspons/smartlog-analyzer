@@ -66,7 +66,7 @@ describe('loadConfig', () => {
 });
 
 describe('loadConfig LLM settings', () => {
-  it('S36: gemini with an API key exposes it', () => {
+  it('gemini with an API key exposes it', () => {
     const { llm } = loadConfig({ ...BASE, LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'k' });
     expect(llm).toEqual({
       provider: 'gemini',
@@ -77,7 +77,7 @@ describe('loadConfig LLM settings', () => {
     });
   });
 
-  it.each([undefined, ''])('S36: gemini without GEMINI_API_KEY=%j fails naming it', (key) => {
+  it.each([undefined, ''])('gemini without GEMINI_API_KEY=%j fails naming it', (key) => {
     const env = { ...BASE, LLM_PROVIDER: 'gemini', ...(key !== undefined && { GEMINI_API_KEY: key }) };
     expect(() => loadConfig(env)).toThrow(/GEMINI_API_KEY/);
   });
@@ -86,7 +86,7 @@ describe('loadConfig LLM settings', () => {
     expect(loadConfig({ ...BASE, LLM_PROVIDER: 'mock' }).llm.apiKey).toBeUndefined();
   });
 
-  it('S37: rejects an unknown LLM_PROVIDER', () => {
+  it('rejects an unknown LLM_PROVIDER', () => {
     expect(() => loadConfig({ ...BASE, LLM_PROVIDER: 'openai' })).toThrow(/LLM_PROVIDER/);
   });
 
@@ -94,11 +94,11 @@ describe('loadConfig LLM settings', () => {
     expect(loadConfig({ ...BASE, LLM_MODEL: 'other-model' }).llm.model).toBe('other-model');
   });
 
-  it('S38: coerces LLM_TIMEOUT_MS to a number', () => {
+  it('coerces LLM_TIMEOUT_MS to a number', () => {
     expect(loadConfig({ ...BASE, LLM_TIMEOUT_MS: '1500' }).llm.timeoutMs).toBe(1500);
   });
 
-  it.each(['0', 'abc', '-5', '1.5', ''])('S38: rejects LLM_TIMEOUT_MS=%j', (value) => {
+  it.each(['0', 'abc', '-5', '1.5', ''])('rejects LLM_TIMEOUT_MS=%j', (value) => {
     expect(() => loadConfig({ ...BASE, LLM_TIMEOUT_MS: value })).toThrow(/LLM_TIMEOUT_MS/);
   });
 
@@ -106,11 +106,11 @@ describe('loadConfig LLM settings', () => {
     ['0', 0],
     ['10', 10],
     ['5', 5],
-  ])('S39: accepts LLM_MAX_RETRIES=%j', (value, expected) => {
+  ])('accepts LLM_MAX_RETRIES=%j', (value, expected) => {
     expect(loadConfig({ ...BASE, LLM_MAX_RETRIES: value }).llm.maxRetries).toBe(expected);
   });
 
-  it.each(['-1', '11', 'abc', '1.5', ''])('S39: rejects LLM_MAX_RETRIES=%j', (value) => {
+  it.each(['-1', '11', 'abc', '1.5', ''])('rejects LLM_MAX_RETRIES=%j', (value) => {
     expect(() => loadConfig({ ...BASE, LLM_MAX_RETRIES: value })).toThrow(/LLM_MAX_RETRIES/);
   });
 });

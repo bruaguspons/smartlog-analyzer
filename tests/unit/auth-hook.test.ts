@@ -47,7 +47,7 @@ describe('auth hook (/api scope)', () => {
     return app;
   }
 
-  it('S-AA-2: valid key attaches the service; repo queried once', async () => {
+  it('valid key attaches the service; repo queried once', async () => {
     const { repo, findByApiKey } = spiedRepo();
     const res = await build(repo).inject({ method: 'GET', url: '/api/p', headers: { 'x-api-key': 'k-active' } });
     expect(res.statusCode).toBe(200);
@@ -55,7 +55,7 @@ describe('auth hook (/api scope)', () => {
     expect(findByApiKey).toHaveBeenCalledTimes(1);
   });
 
-  it('S-AA-1/7: missing, empty, unknown and inactive give an identical 401', async () => {
+  it('missing, empty, unknown and inactive give an identical 401', async () => {
     const { repo } = spiedRepo();
     build(repo);
     const headersList: Record<string, string>[] = [{}, { 'x-api-key': '' }, { 'x-api-key': 'nope' }, { 'x-api-key': 'k-off' }];
@@ -75,7 +75,7 @@ describe('auth hook (/api scope)', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('S-AA-3: unknown /api route without key is 404; repo not queried', async () => {
+  it('unknown /api route without key is 404; repo not queried', async () => {
     const { repo, findByApiKey } = spiedRepo();
     const res = await build(repo).inject({ method: 'GET', url: '/api/nope' });
     expect(res.statusCode).toBe(404);
@@ -83,20 +83,20 @@ describe('auth hook (/api scope)', () => {
     expect(findByApiKey).not.toHaveBeenCalled();
   });
 
-  it('S-AA-4: unknown /api route with valid key is 404', async () => {
+  it('unknown /api route with valid key is 404', async () => {
     const { repo } = spiedRepo();
     const res = await build(repo).inject({ method: 'GET', url: '/api/nope', headers: { 'x-api-key': 'k-active' } });
     expect(res.statusCode).toBe(404);
     expect(res.json<{ error: { code: string } }>().error.code).toBe('NOT_FOUND');
   });
 
-  it('S-AA-5: unknown root route is 404', async () => {
+  it('unknown root route is 404', async () => {
     const { repo } = spiedRepo();
     const res = await build(repo).inject({ method: 'GET', url: '/nope' });
     expect(res.statusCode).toBe(404);
   });
 
-  it('S-AA-6: a root route registered outside the scope needs no key and skips the repo', async () => {
+  it('a root route registered outside the scope needs no key and skips the repo', async () => {
     const { repo, findByApiKey } = spiedRepo();
     build(repo).get('/api/open', () => ({ ok: true }));
     const res = await app.inject({ method: 'GET', url: '/api/open' });
@@ -104,12 +104,12 @@ describe('auth hook (/api scope)', () => {
     expect(findByApiKey).not.toHaveBeenCalled();
   });
 
-  it('S-AA-8: auth precedes body validation', async () => {
+  it('auth precedes body validation', async () => {
     const res = await build(new InMemoryServiceRepository()).inject({ method: 'POST', url: '/api/v', payload: {} });
     expect(res.statusCode).toBe(401);
   });
 
-  it('S-AA-10: empty repository gives 401 for any key', async () => {
+  it('empty repository gives 401 for any key', async () => {
     const res = await build(new InMemoryServiceRepository()).inject({
       method: 'GET',
       url: '/api/p',
@@ -118,7 +118,7 @@ describe('auth hook (/api scope)', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('S-AA-10: buildApp without serviceRepository is a type error and fails at boot', async () => {
+  it('buildApp without serviceRepository is a type error and fails at boot', async () => {
     // @ts-expect-error serviceRepository is required (fail-closed)
     app = buildApp({ logLevel: 'silent' });
     await expect(app.ready()).rejects.toThrow(TypeError);

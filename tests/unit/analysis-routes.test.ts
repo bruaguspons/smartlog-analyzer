@@ -39,7 +39,7 @@ describe('analysis routes', () => {
     const logRepo = new InMemoryLogRepository();
     for (let n = 1; n <= logCount; n += 1) logRepo.logs.push(makeListLog(n));
     analysisRepo = new InMemoryAnalysisRepository();
-    llm = new ScriptedLlmClient(...(script.length > 0 ? script : [okJson({ summary: 'Resumen', findings: [] })]));
+    llm = new ScriptedLlmClient(...(script.length > 0 ? script : [okJson({ summary: 'Summary', findings: [] })]));
     runner = new AnalysisRunner({ repo: analysisRepo, llm, policy: { timeoutMs: 30_000, maxRetries: 0 }, now: () => NOW });
     let counter = 0;
     app = buildApp({
@@ -62,14 +62,14 @@ describe('analysis routes', () => {
   const get = (id: string, h: Record<string, string> = headers) => app.inject({ method: 'GET', url: `/api/analysis/${id}`, headers: h });
   const body = (res: { json: () => unknown }) => res.json() as Body;
 
-  it('S1: POST answers 202 with the UUID, hasMore and nextCursor', async () => {
+  it('POST answers 202 with the UUID, hasMore and nextCursor', async () => {
     build(3);
     const res = await post();
     expect(res.statusCode).toBe(202);
     expect(res.json()).toEqual({ id: analysisId(1), hasMore: false, nextCursor: null });
   });
 
-  it('S2: hasMore and nextCursor when the filters match more than one page', async () => {
+  it('hasMore and nextCursor when the filters match more than one page', async () => {
     build(5);
     const res = await post({ limit: 2 });
     expect(res.statusCode).toBe(202);
@@ -77,7 +77,7 @@ describe('analysis routes', () => {
     expect(typeof body(res).nextCursor).toBe('string');
   });
 
-  it('S3: invalid limit or unknown key is a 400 VALIDATION_ERROR', async () => {
+  it('invalid limit or unknown key is a 400 VALIDATION_ERROR', async () => {
     build(1);
     for (const payload of [{ limit: 201 }, { foo: 1 }]) {
       const res = await post(payload);
@@ -86,7 +86,7 @@ describe('analysis routes', () => {
     }
   });
 
-  it('S4: no matching logs is a 422 NO_LOGS_TO_ANALYZE', async () => {
+  it('no matching logs is a 422 NO_LOGS_TO_ANALYZE', async () => {
     build(0);
     const res = await post();
     expect(res.statusCode).toBe(422);
@@ -94,7 +94,7 @@ describe('analysis routes', () => {
     expect(await analysisRepo.findById(analysisId(1))).toBeNull();
   });
 
-  it('S5: a second POST while one is PROCESSING is a 409 with the running id in details', async () => {
+  it('a second POST while one is PROCESSING is a 409 with the running id in details', async () => {
     build(2, hangUntilAborted);
     const first = await post();
 
@@ -104,8 +104,8 @@ describe('analysis routes', () => {
     expect(res.json()).toMatchObject({ error: { code: 'ANALYSIS_IN_PROGRESS', details: { id: body(first).id } } });
   });
 
-  it('S9: GET of a COMPLETED analysis returns findings, logIds and tokens without any rawResponse key', async () => {
-    build(2, okJson({ summary: 'Resumen', findings: [{ category: 'DATABASE', severity: 'HIGH', description: 'd', suggestions: ['s'], logRefs: [1] }] }, { prompt: 9, completion: 4 }));
+  it('GET of a COMPLETED analysis returns findings, logIds and tokens without any rawResponse key', async () => {
+    build(2, okJson({ summary: 'Summary', findings: [{ category: 'DATABASE', severity: 'HIGH', description: 'd', suggestions: ['s'], logRefs: [1] }] }, { prompt: 9, completion: 4 }));
     const { id } = body(await post());
     await runner.idle();
 
@@ -116,7 +116,7 @@ describe('analysis routes', () => {
     expect(json).toMatchObject({
       id,
       status: 'COMPLETED',
-      summary: 'Resumen',
+      summary: 'Summary',
       logCount: 2,
       provider: 'scripted',
       model: 'scripted-model',
@@ -126,13 +126,14 @@ describe('analysis routes', () => {
     });
     expect(json.findings).toHaveLength(1);
     expect(json.findings[0]).toMatchObject({ id: expect.any(Number) as number, category: 'DATABASE', severity: 'HIGH', suggestions: ['s'], logIds: [makeListLog(2).id] });
-    expect(JSON.stringify(json)).not.toMatch(/raw/i);
+    // The exact key set is the contract. The in-memory view has no raw response to leak; the Postgres
+    // raw_response readback is covered in tests/integration/analysis-http.test.ts.
     expect(Object.keys(json).sort()).toEqual(
       ['createdAt', 'durationMs', 'error', 'findings', 'id', 'logCount', 'model', 'provider', 'status', 'summary', 'tokens'],
     );
   });
 
-  it('S10: GET of a PROCESSING analysis has null summary and duration and no findings', async () => {
+  it('GET of a PROCESSING analysis has null summary and duration and no findings', async () => {
     build(1, hangUntilAborted);
     const { id } = body(await post());
 
@@ -141,7 +142,7 @@ describe('analysis routes', () => {
     expect(json).toMatchObject({ status: 'PROCESSING', summary: null, findings: [], durationMs: null, tokens: null, error: null });
   });
 
-  it('S11: GET of a FAILED analysis carries the error and the token usage the provider reported', async () => {
+  it('GET of a FAILED analysis carries the error and the token usage the provider reported', async () => {
     build(1, { text: '{"summary":"x"}', usage: { prompt: 3, completion: 1 } });
     const { id } = body(await post());
     await runner.idle();
@@ -151,7 +152,7 @@ describe('analysis routes', () => {
     expect(json).toMatchObject({ status: 'FAILED', error: { code: 'LLM_INVALID_RESPONSE' }, tokens: { prompt: 3, completion: 1 } });
   });
 
-  it('S12: a non-UUID id is a 400 and an unknown UUID a 404', async () => {
+  it('a non-UUID id is a 400 and an unknown UUID a 404', async () => {
     build(1);
     expect((await get('not-a-uuid')).statusCode).toBe(400);
     const res = await get(analysisId(99));
@@ -159,7 +160,7 @@ describe('analysis routes', () => {
     expect(res.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
   });
 
-  it('S8: a missing, unknown or inactive key gives the same 401 on POST and GET', async () => {
+  it('a missing, unknown or inactive key gives the same 401 on POST and GET', async () => {
     build(1);
     const bodies = new Set<string>();
     const wrongHeaders: Record<string, string>[] = [{}, { 'x-api-key': 'nope' }, { 'x-api-key': 'k-off' }];

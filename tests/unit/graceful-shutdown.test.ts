@@ -21,7 +21,7 @@ describe('registerGracefulShutdown', () => {
     expect(result).toBe(handle);
   });
 
-  it('S-PL-1: a signal is logged at info and closes the app once without logging an error', async () => {
+  it('a signal is logged at info and closes the app once without logging an error', async () => {
     const { app, callback } = setup();
     await callback({ signal: 'SIGTERM' });
     expect(app.log.info).toHaveBeenCalledWith({ signal: 'SIGTERM' }, expect.any(String));
@@ -29,7 +29,7 @@ describe('registerGracefulShutdown', () => {
     expect(app.log.error).not.toHaveBeenCalled();
   });
 
-  it('S-PL-2: a fatal error is logged and the app is still closed', async () => {
+  it('a fatal error is logged and the app is still closed', async () => {
     const { app, callback } = setup();
     const err = new Error('boom');
     await callback({ err });
@@ -38,7 +38,7 @@ describe('registerGracefulShutdown', () => {
     expect(app.close).toHaveBeenCalledTimes(1);
   });
 
-  it('S-PL-3: a close failure propagates', async () => {
+  it('a close failure propagates', async () => {
     const { callback } = setup(() => Promise.reject(new Error('close failed')));
     await expect(callback({ signal: 'SIGINT' })).rejects.toThrow('close failed');
   });

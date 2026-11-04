@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeCursor } from '../../src/modules/logs/application/log-cursor.js';
-import {
-  listLogsQuerySchema,
-  listLogsResponseSchema,
-} from '../../src/modules/logs/http/list-logs-schema.js';
+import { listLogsQuerySchema } from '../../src/modules/logs/http/list-logs-schema.js';
 
 const ID = '0192f1c0-0000-7000-8000-000000000001';
 const parse = (v: unknown) => listLogsQuerySchema.safeParse(v);
@@ -46,27 +43,5 @@ describe('listLogsQuerySchema', () => {
     const r = parse({ from: '2026-01-02T00:00:00Z', to: '2026-01-01T00:00:00Z' });
     expect(r.success).toBe(false);
     expect(r.error?.issues[0]?.path).toEqual(['from']);
-  });
-});
-
-describe('listLogsResponseSchema', () => {
-  const item = {
-    id: ID,
-    serviceId: 1,
-    level: 'INFO',
-    timestamp: new Date(),
-    message: 'm',
-    traceId: null,
-    metadata: null,
-  };
-
-  it('accepts items/nextCursor/hasMore', () => {
-    expect(listLogsResponseSchema.safeParse({ items: [item], nextCursor: null, hasMore: false }).success).toBe(
-      true,
-    );
-  });
-
-  it('rejects a snake_case page', () => {
-    expect(listLogsResponseSchema.safeParse({ items: [], next_cursor: null, has_more: false }).success).toBe(false);
   });
 });

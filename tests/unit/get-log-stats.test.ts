@@ -12,7 +12,7 @@ function deps(groups: LogCountGroup[], names: [number, string][] = [[1, 'one'], 
 }
 
 describe('getLogStats', () => {
-  it('S11-S13: sorts by service id then severity whatever order the repository returns', async () => {
+  it('sorts by service id then severity whatever order the repository returns', async () => {
     const groups: LogCountGroup[] = [
       { serviceId: 2, level: 'INFO', count: 1 },
       { serviceId: 1, level: 'FATAL', count: 1 },
@@ -34,7 +34,7 @@ describe('getLogStats', () => {
     ]);
   });
 
-  it('S10: total is the sum of the counts and names come from the service repository', async () => {
+  it('total is the sum of the counts and names come from the service repository', async () => {
     const d = deps([
       { serviceId: 1, level: 'ERROR', count: 2 },
       { serviceId: 3, level: 'INFO', count: 5 },
@@ -54,14 +54,14 @@ describe('getLogStats', () => {
     expect(d.findNamesByIds).toHaveBeenCalledWith([1, 3]);
   });
 
-  it('S2: no groups returns an empty result without looking up names', async () => {
+  it('no groups returns an empty result without looking up names', async () => {
     const d = deps([]);
 
     expect(await getLogStats({}, d)).toEqual({ total: 0, groups: [] });
     expect(d.findNamesByIds).not.toHaveBeenCalled();
   });
 
-  it('S29: a group whose service name is missing rejects instead of returning a skewed total', async () => {
+  it('a group whose service name is missing rejects instead of returning a skewed total', async () => {
     const d = deps([{ serviceId: 9, level: 'INFO', count: 1 }]);
 
     await expect(getLogStats({}, d)).rejects.toThrow(/service 9/);

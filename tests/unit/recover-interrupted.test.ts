@@ -4,7 +4,7 @@ import { InMemoryAnalysisRepository } from '../../src/modules/analysis/infrastru
 import { analysisId, logId } from '../shared/analysis-repository-contract.js';
 
 describe('recoverInterrupted', () => {
-  it('S17: leftover PROCESSING rows become FAILED/INTERRUPTED and the next analysis can start', async () => {
+  it('leftover PROCESSING rows become FAILED/INTERRUPTED and the next analysis can start', async () => {
     const repo = new InMemoryAnalysisRepository();
     const created = { provider: 'mock', model: 'mock', createdAt: new Date() };
     await repo.createProcessing({ id: analysisId(1), ...created }, [logId(1)]);

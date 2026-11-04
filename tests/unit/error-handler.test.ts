@@ -23,7 +23,7 @@ describe('error envelope', () => {
     await app.close();
   });
 
-  it('S-EE-1: unknown route -> 404 NOT_FOUND, no details key', async () => {
+  it('unknown route -> 404 NOT_FOUND, no details key', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     const res = await app.inject({ method: 'GET', url: '/does-not-exist', headers: AUTH });
     expect(res.statusCode).toBe(404);
@@ -34,7 +34,7 @@ describe('error envelope', () => {
     expect('details' in body.error).toBe(false);
   });
 
-  it('S-EV-1: invalid zod body -> 400 with details limited to instancePath/keyword/message', async () => {
+  it('invalid zod body -> 400 with details limited to instancePath/keyword/message', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     typed().post('/v', { schema: { body: z.object({ level: z.enum(['INFO', 'ERROR']) }) } }, () => ({}));
     const res = await app.inject({ method: 'POST', url: '/v', headers: AUTH, payload: { level: 'X' } });
@@ -47,7 +47,7 @@ describe('error envelope', () => {
     expect(typeof error.details[0]?.message).toBe('string');
   });
 
-  it('S-EV-2: invalid zod query -> details instancePath /limit', async () => {
+  it('invalid zod query -> details instancePath /limit', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     typed().get('/q', { schema: { querystring: z.object({ limit: z.coerce.number() }) } }, () => ({}));
     const res = await app.inject({ method: 'GET', url: '/q?limit=abc', headers: AUTH });
@@ -57,7 +57,7 @@ describe('error envelope', () => {
     expect(error.details[0]?.instancePath).toBe('/limit');
   });
 
-  it('S-EV-3: multiple issues -> one details item per issue', async () => {
+  it('multiple issues -> one details item per issue', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     typed().post('/v', { schema: { body: z.object({ a: z.string(), b: z.string() }) } }, () => ({}));
     const res = await app.inject({ method: 'POST', url: '/v', headers: AUTH, payload: {} });
@@ -65,7 +65,7 @@ describe('error envelope', () => {
     expect(res.json<{ error: { details: unknown[] } }>().error.details).toHaveLength(2);
   });
 
-  it('S-EV-4: response schema mismatch -> generic 500, no leak, error logged', async () => {
+  it('response schema mismatch -> generic 500, no leak, error logged', async () => {
     const lines: string[] = [];
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'info', logStream: { write: (m) => lines.push(m) } });
     typed().get(
@@ -82,7 +82,7 @@ describe('error envelope', () => {
     expect(lines.map((l) => JSON.parse(l) as { level: number }).some((l) => l.level === 50)).toBe(true);
   });
 
-  it('S-EV-5: malformed JSON body -> observed 400 VALIDATION_ERROR', async () => {
+  it('malformed JSON body responds 400 VALIDATION_ERROR', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
@@ -95,7 +95,7 @@ describe('error envelope', () => {
     expect(res.json<{ error: { code: string } }>().error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('empty body with JSON content-type -> observed 400 VALIDATION_ERROR', async () => {
+  it('empty body with JSON content-type responds 400 VALIDATION_ERROR', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
@@ -108,7 +108,7 @@ describe('error envelope', () => {
     expect(res.json<{ error: { code: string } }>().error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('S-EV-7: unsupported media type -> observed 415 VALIDATION_ERROR envelope', async () => {
+  it('unsupported media type responds 415 with the VALIDATION_ERROR envelope', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
@@ -121,7 +121,7 @@ describe('error envelope', () => {
     expect(res.json<{ error: { code: string } }>().error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('S-EV-6: body over bodyLimit -> 413 PAYLOAD_TOO_LARGE', async () => {
+  it('body over bodyLimit -> 413 PAYLOAD_TOO_LARGE', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.post('/j', () => ({}));
     const res = await app.inject({
@@ -134,7 +134,7 @@ describe('error envelope', () => {
     expect(res.json<{ error: { code: string } }>().error.code).toBe('PAYLOAD_TOO_LARGE');
   });
 
-  it('S-EE-5: unexpected error -> generic 500 without leaks', async () => {
+  it('unexpected error -> generic 500 without leaks', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.get('/boom', () => {
       throw new Error('db password=secret at /srv/x');
@@ -145,7 +145,7 @@ describe('error envelope', () => {
     expect(res.body).not.toMatch(/secret|\/srv\/x|Error:|\bat /);
   });
 
-  it('S-EE-6: original error is logged at error level with stack', async () => {
+  it('original error is logged at error level with stack', async () => {
     const lines: string[] = [];
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'info', logStream: { write: (m) => lines.push(m) } });
     app.get('/boom', () => {
@@ -159,7 +159,7 @@ describe('error envelope', () => {
     expect(entry?.err?.stack).toContain('at ');
   });
 
-  it('S-EE-7: AppError passes through with details', async () => {
+  it('AppError passes through with details', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.get('/conflict', () => {
       throw new AppError(409, 'ANALYSIS_IN_PROGRESS', 'busy', { id: 'x' });
@@ -171,7 +171,7 @@ describe('error envelope', () => {
     });
   });
 
-  it('S-EE-9: non-error statusCode (200 / non-numeric) -> generic 500', async () => {
+  it('non-error statusCode (200 / non-numeric) -> generic 500', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.get('/a', () => {
       throw Object.assign(new Error('x'), { statusCode: 200 });
@@ -186,7 +186,7 @@ describe('error envelope', () => {
     }
   });
 
-  it('S-EE-10: errors from an encapsulated child plugin use the root handler', async () => {
+  it('errors from an encapsulated child plugin use the root handler', async () => {
     app = buildApp({ serviceRepository: repo, checkDatabase: dbOk, logLevel: 'silent' });
     app.register((child, _opts, done) => {
       child.get('/child', () => {
@@ -213,7 +213,7 @@ describe('toErrorResponse', () => {
     expect('details' in res.body.error).toBe(false);
   });
 
-  it('S-EV-8: statusCode 429 keeps status with VALIDATION_ERROR', () => {
+  it('statusCode 429 keeps status with VALIDATION_ERROR', () => {
     const res = toErrorResponse({ statusCode: 429, message: 'slow down' });
     expect(res.statusCode).toBe(429);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');

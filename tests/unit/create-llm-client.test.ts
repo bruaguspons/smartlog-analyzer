@@ -13,7 +13,7 @@ const llm = (overrides: Partial<Config['llm']> = {}): Config['llm'] => ({
 });
 
 describe('createLlmClient', () => {
-  it('S20: returns the mock client for the mock provider', () => {
+  it('returns the mock client for the mock provider', () => {
     expect(createLlmClient(llm())).toBeInstanceOf(MockClient);
   });
 

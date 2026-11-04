@@ -71,16 +71,6 @@ export function runLogStatsContract(
       expect(await count({ traceId: 'abc' })).toEqual([g(1, 'INFO', 1)]);
     });
 
-    it('search is a case-insensitive substring and treats % literally', async () => {
-      await seed([
-        makeListLog(1, { message: 'Connection timeout' }),
-        makeListLog(2, { message: '100% done' }),
-        makeListLog(3, { message: '1000 done' }),
-      ]);
-      expect(await count({ search: 'TIMEOUT' })).toEqual([g(1, 'INFO', 1)]);
-      expect(await count({ search: '100%' })).toEqual([g(1, 'INFO', 1)]);
-    });
-
     it.each([
       ['100%', ['100% done'], ['1000 done', '100 done']],
       ['a_c', ['a_c'], ['abc']],

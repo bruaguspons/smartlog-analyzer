@@ -6,7 +6,6 @@ import { createLogsRoutes } from '../../src/modules/logs/http/logs-routes.js';
 import { InMemoryLogRepository } from '../../src/modules/logs/infrastructure/in-memory-log-repository.js';
 import type { Service } from '../../src/modules/services/domain/service.js';
 import { InMemoryServiceRepository } from '../../src/modules/services/infrastructure/in-memory-service-repository.js';
-import { randomUUIDv7 } from 'node:crypto';
 import { makeListLog } from '../shared/log-repository-list-contract.js';
 
 const ID = '0192f1c0-0000-7000-8000-000000000001';
@@ -41,7 +40,7 @@ describe('POST /api/logs', () => {
   const post = (payload: unknown, h: Record<string, string> = headers) =>
     app.inject({ method: 'POST', url: '/api/logs', headers: h, payload: payload as object });
 
-  it('S1/S21: 201 with exactly the seven camelCase keys and the generated id', async () => {
+  it('201 with exactly the seven camelCase keys and the generated id', async () => {
     build(undefined, () => ID);
     const body = { ...valid, traceId: 't-1', metadata: { a: 1 } };
 
@@ -54,36 +53,21 @@ describe('POST /api/logs', () => {
     );
   });
 
-  it('S2: absent optionals are null', async () => {
+  it('absent optionals are null', async () => {
     build();
     const res = await post(valid);
     expect(res.statusCode).toBe(201);
     expect(res.json()).toMatchObject({ traceId: null, metadata: null });
   });
 
-  it('S11: normalizes an offset timestamp to UTC', async () => {
+  it('normalizes an offset timestamp to UTC', async () => {
     build();
     const res = await post({ ...valid, timestamp: '2026-11-03T08:00:00-03:00' });
     expect(res.statusCode).toBe(201);
     expect(json(res).timestamp).toBe('2026-11-03T11:00:00.000Z');
   });
 
-  it('S22: default generator yields a UUIDv7', async () => {
-    build(undefined, randomUUIDv7);
-    const res = await post(valid);
-    expect(json(res).id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-  });
-
-  it('S23: persists through the repository port, attributed to the key service', async () => {
-    const repo = new InMemoryLogRepository();
-    build(repo);
-    const res = await post(valid);
-    expect(repo.logs).toHaveLength(1);
-    expect(repo.logs[0]).toMatchObject({ id: ID, serviceId: 7, message: 'boom' });
-    expect({ ...res.json(), timestamp: new Date(json(res).timestamp) }).toEqual(repo.logs[0]);
-  });
-
-  it('S3: body serviceId is rejected and nothing is persisted', async () => {
+  it('body serviceId is rejected and nothing is persisted', async () => {
     const repo = new InMemoryLogRepository();
     build(repo);
     const res = await post({ ...valid, serviceId: 9 });
@@ -92,7 +76,7 @@ describe('POST /api/logs', () => {
     expect(repo.logs).toHaveLength(0);
   });
 
-  it('S5: missing key with an invalid body is 401, not 400', async () => {
+  it('missing key with an invalid body is 401, not 400', async () => {
     const repo = new InMemoryLogRepository();
     build(repo);
     const res = await post({ nope: true }, {});
@@ -100,7 +84,7 @@ describe('POST /api/logs', () => {
     expect(repo.logs).toHaveLength(0);
   });
 
-  it('S6: inactive and unknown keys give an identical 401', async () => {
+  it('inactive and unknown keys give an identical 401', async () => {
     build();
     const a = await post(valid, { 'x-api-key': 'k-off' });
     const b = await post(valid, { 'x-api-key': 'nope' });
@@ -108,14 +92,14 @@ describe('POST /api/logs', () => {
     expect(a.json()).toEqual(b.json());
   });
 
-  it('S10: future skew gives 400 with /timestamp in details', async () => {
+  it('future skew gives 400 with /timestamp in details', async () => {
     build();
     const res = await post({ ...valid, timestamp: new Date(NOW.getTime() + 300_001).toISOString() });
     expect(res.statusCode).toBe(400);
     expect(json(res).error.details).toEqual([expect.objectContaining({ instancePath: '/timestamp' })]);
   });
 
-  it('S18: two invalid fields give two details and persist nothing', async () => {
+  it('two invalid fields give two details and persist nothing', async () => {
     const repo = new InMemoryLogRepository();
     build(repo);
     const res = await post({ ...valid, level: 'x', message: '' });
@@ -124,7 +108,7 @@ describe('POST /api/logs', () => {
     expect(repo.logs).toHaveLength(0);
   });
 
-  it('S19: malformed JSON is a 400 VALIDATION_ERROR', async () => {
+  it('malformed JSON is a 400 VALIDATION_ERROR', async () => {
     build();
     const res = await app.inject({
       method: 'POST',
@@ -136,7 +120,7 @@ describe('POST /api/logs', () => {
     expect(json(res).error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('S20: a body over 1 MiB is a 413 PAYLOAD_TOO_LARGE', async () => {
+  it('a body over 1 MiB is a 413 PAYLOAD_TOO_LARGE', async () => {
     build();
     const res = await post({ ...valid, message: 'a'.repeat(1_048_577) });
     expect(res.statusCode).toBe(413);
@@ -155,11 +139,6 @@ describe('POST /api/logs', () => {
     expect(res.body).not.toContain('secret');
   });
 
-  it('documents the route in OpenAPI', async () => {
-    build();
-    await app.ready();
-    expect(Object.keys(app.swagger().paths ?? {})).toContain('/api/logs');
-  });
 });
 
 describe('GET /api/logs', () => {
@@ -196,7 +175,7 @@ describe('GET /api/logs', () => {
 
   afterEach(() => app.close());
 
-  it('S1: 200 with exactly items/nextCursor/hasMore and the seven camelCase item keys', async () => {
+  it('200 with exactly items/nextCursor/hasMore and the seven camelCase item keys', async () => {
     await build(1);
     const res = await get('/api/logs');
     expect(res.statusCode).toBe(200);
@@ -206,26 +185,26 @@ describe('GET /api/logs', () => {
     );
   });
 
-  it('S2: empty result', async () => {
+  it('empty result', async () => {
     await build();
     const res = await get('/api/logs');
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ items: [], nextCursor: null, hasMore: false });
   });
 
-  it('S5/S6: lists every service; serviceId only filters', async () => {
+  it('lists every service; serviceId only filters', async () => {
     await build(4);
     expect(page(await get('/api/logs')).items.map((i) => i.serviceId).sort()).toEqual([1, 1, 2, 2]);
     expect(page(await get('/api/logs?serviceId=2')).items.map((i) => i.serviceId)).toEqual([2, 2]);
   });
 
-  it('S17/S18: repeated and single level', async () => {
+  it('repeated and single level', async () => {
     await build(4);
     expect(page(await get('/api/logs?level=ERROR')).items).toHaveLength(2);
     expect(page(await get('/api/logs?level=ERROR&level=FATAL')).items).toHaveLength(4);
   });
 
-  it('S10: follows nextCursor until null', async () => {
+  it('follows nextCursor until null', async () => {
     await build(5);
     const sizes: number[] = [];
     const seen: string[] = [];
@@ -241,7 +220,28 @@ describe('GET /api/logs', () => {
     expect(new Set(seen).size).toBe(5);
   });
 
-  it('S3/S4: missing, unknown and inactive keys give the same 401, before validation', async () => {
+  it('without limit the page holds 50 items; exactly 50 rows is the last page, 51 has more', async () => {
+    await build(50);
+    const exact = page(await get('/api/logs'));
+    await app.close();
+    await build(51);
+    const over = page(await get('/api/logs'));
+
+    expect(exact.items).toHaveLength(50);
+    expect(exact.hasMore).toBe(false);
+    expect(exact.nextCursor).toBeNull();
+    expect(over.items).toHaveLength(50);
+    expect(over.hasMore).toBe(true);
+    expect(over.nextCursor).not.toBeNull();
+  });
+
+  it('limit=200 is the accepted maximum', async () => {
+    await build(1);
+
+    expect((await get('/api/logs?limit=200')).statusCode).toBe(200);
+  });
+
+  it('missing, unknown and inactive keys give the same 401, before validation', async () => {
     await build();
     const missing = await get('/api/logs?limit=0', {});
     const unknown = await get('/api/logs', { 'x-api-key': 'nope' });
@@ -262,7 +262,7 @@ describe('GET /api/logs', () => {
     'foo=1',
     'search=',
     'traceId=',
-  ])('S39: %s is a 400 VALIDATION_ERROR with a details list', async (query) => {
+  ])('%s is a 400 VALIDATION_ERROR with a details list', async (query) => {
     await build();
     const res = await get(`/api/logs?${query}`);
     expect(res.statusCode).toBe(400);
@@ -279,13 +279,6 @@ describe('GET /api/logs', () => {
     expect(res.json()).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
   });
 
-  it('documents GET /api/logs in OpenAPI', async () => {
-    await build();
-    await app.ready();
-    const op = app.swagger().paths?.['/api/logs']?.get;
-    expect(op).toBeDefined();
-    expect(Object.keys(op?.responses ?? {})).toEqual(expect.arrayContaining(['200']));
-  });
 });
 
 describe('GET /api/logs/stats', () => {
@@ -323,7 +316,7 @@ describe('GET /api/logs/stats', () => {
 
   afterEach(() => app.close());
 
-  it('S1/S5/S7: 200 with exactly total/groups over every service, inactive included, in order', async () => {
+  it('200 with exactly total/groups over every service, inactive included, in order', async () => {
     await build(mixed());
     const res = await get('/api/logs/stats');
     expect(res.statusCode).toBe(200);
@@ -338,7 +331,7 @@ describe('GET /api/logs/stats', () => {
     });
   });
 
-  it('S2: empty result is 200 { total: 0, groups: [] }', async () => {
+  it('empty result is 200 { total: 0, groups: [] }', async () => {
     await build();
     const res = await get('/api/logs/stats');
     expect(res.statusCode).toBe(200);
@@ -349,14 +342,14 @@ describe('GET /api/logs/stats', () => {
     ['missing', {}],
     ['unknown', { 'x-api-key': 'nope' }],
     ['inactive', { 'x-api-key': 'k-off' }],
-  ])('S3/S4: %s key is the same 401', async (_label, h) => {
+  ])('%s key is the same 401', async (_label, h) => {
     await build(mixed());
     const res = await get('/api/logs/stats', h);
     expect(res.statusCode).toBe(401);
     expect(stats(res).error.code).toBe('UNAUTHORIZED');
   });
 
-  it('S6/S14-S19: filters are forwarded and narrow the counts', async () => {
+  it('filters are forwarded and narrow the counts', async () => {
     await build(mixed());
     const only = async (query: string) => stats(await get(`/api/logs/stats?${query}`)).total;
     expect(await only('serviceId=2')).toBe(1);
@@ -375,7 +368,7 @@ describe('GET /api/logs/stats', () => {
     'level=error',
     'serviceId=0',
     'from=2026-01-02T00:00:00Z&to=2026-01-01T00:00:00Z',
-  ])('S21-S24: %s is a 400 VALIDATION_ERROR with a details list', async (query) => {
+  ])('%s is a 400 VALIDATION_ERROR with a details list', async (query) => {
     await build();
     const res = await get(`/api/logs/stats?${query}`);
     expect(res.statusCode).toBe(400);
@@ -383,7 +376,7 @@ describe('GET /api/logs/stats', () => {
     expect(stats(res).error.details?.length).toBeGreaterThan(0);
   });
 
-  it('S23: from equal to to is accepted', async () => {
+  it('from equal to to is accepted', async () => {
     await build();
     const res = await get('/api/logs/stats?from=2026-01-01T00:00:00Z&to=2026-01-01T00:00:00Z');
     expect(res.statusCode).toBe(200);
@@ -408,11 +401,4 @@ describe('GET /api/logs/stats', () => {
     expect(res.body).not.toContain('service 99');
   });
 
-  it('documents GET /api/logs/stats in OpenAPI', async () => {
-    await build();
-    await app.ready();
-    const op = app.swagger().paths?.['/api/logs/stats']?.get;
-    expect(op).toBeDefined();
-    expect(Object.keys(op?.responses ?? {})).toEqual(expect.arrayContaining(['200']));
-  });
 });

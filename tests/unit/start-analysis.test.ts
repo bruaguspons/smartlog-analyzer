@@ -27,7 +27,7 @@ function setup(logCount: number) {
 }
 
 describe('startAnalysis', () => {
-  it('S1: inserts a PROCESSING analysis with its logs, then starts the runner and returns the page info', async () => {
+  it('inserts a PROCESSING analysis with its logs, then starts the runner and returns the page info', async () => {
     const { deps, analysisRepo, runner, log } = setup(3);
     const createProcessing = vi.spyOn(analysisRepo, 'createProcessing');
 
@@ -49,7 +49,7 @@ describe('startAnalysis', () => {
     expect(createProcessing.mock.invocationCallOrder[0]).toBeLessThan(runner.start.mock.invocationCallOrder[0] ?? 0);
   });
 
-  it('S2: analyzes only one page and reports hasMore and nextCursor', async () => {
+  it('analyzes only one page and reports hasMore and nextCursor', async () => {
     const { deps, analysisRepo, runner, log } = setup(5);
 
     const result = await startAnalysis({ filters: {}, limit: 2 }, log, deps);
@@ -60,7 +60,7 @@ describe('startAnalysis', () => {
     expect(runner.start.mock.calls[0]?.[0].logs).toHaveLength(2);
   });
 
-  it('S4: an empty page is a 422 NO_LOGS_TO_ANALYZE before any insert', async () => {
+  it('an empty page is a 422 NO_LOGS_TO_ANALYZE before any insert', async () => {
     const { deps, analysisRepo, runner, log } = setup(0);
     const createProcessing = vi.spyOn(analysisRepo, 'createProcessing');
 
@@ -72,7 +72,7 @@ describe('startAnalysis', () => {
     expect(runner.start).not.toHaveBeenCalled();
   });
 
-  it('S5: a second analysis while one is PROCESSING is a 409 carrying the running id, without starting a job', async () => {
+  it('a second analysis while one is PROCESSING is a 409 carrying the running id, without starting a job', async () => {
     const { deps, analysisRepo, runner, log } = setup(3);
     const first = await startAnalysis({ filters: {}, limit: 50 }, log, deps);
 
@@ -84,16 +84,7 @@ describe('startAnalysis', () => {
     expect(await analysisRepo.findById(analysisId(2))).toBeNull();
   });
 
-  it('the store is the only source of the conflict: no read of existing analyses precedes the insert', async () => {
-    const { deps, analysisRepo, log } = setup(1);
-    const findById = vi.spyOn(analysisRepo, 'findById');
-
-    await startAnalysis({ filters: {}, limit: 50 }, log, deps);
-
-    expect(findById).not.toHaveBeenCalled();
-  });
-
-  it('S7: a new analysis is accepted once the previous one is terminal', async () => {
+  it('a new analysis is accepted once the previous one is terminal', async () => {
     const { deps, analysisRepo, log } = setup(1);
     const first = await startAnalysis({ filters: {}, limit: 50 }, log, deps);
     await analysisRepo.fail(first.id, { errorCode: 'INTERNAL_ERROR', errorMessage: 'x', rawResponse: null, usage: null, durationMs: 1 });

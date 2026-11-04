@@ -10,7 +10,7 @@ const validFinding = {
   category: 'DATABASE',
   severity: 'HIGH',
   description: 'Conexiones agotadas',
-  suggestions: ['Aumentar el pool'],
+  suggestions: ['Increase the pool size'],
   logRefs: [1, 2],
 };
 

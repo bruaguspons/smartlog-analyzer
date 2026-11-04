@@ -12,7 +12,7 @@ describe('getAnalysis', () => {
     expect(await getAnalysis(analysisId(1), { repo })).toMatchObject({ id: analysisId(1), status: 'PROCESSING', logCount: 1 });
   });
 
-  it('S12: an unknown id is a 404 NOT_FOUND', async () => {
+  it('an unknown id is a 404 NOT_FOUND', async () => {
     const error: unknown = await getAnalysis(analysisId(9), { repo: new InMemoryAnalysisRepository() }).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(NotFoundError);

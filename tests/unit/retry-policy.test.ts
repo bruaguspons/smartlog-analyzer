@@ -12,6 +12,7 @@ const TIMEOUT_MS = 1000;
 /** Injected sleep that records the requested delays and resolves immediately. */
 function recordingDeps(random = () => 0.5) {
   const delays: number[] = [];
+  const scheduled: number[] = [];
   const deps: RetryDeps = {
     random,
     sleep: (ms) => {
@@ -19,13 +20,14 @@ function recordingDeps(random = () => 0.5) {
       return Promise.resolve();
     },
     schedule: (fn, ms) => {
+      scheduled.push(ms);
       const timer = setTimeout(fn, ms);
       return () => {
         clearTimeout(timer);
       };
     },
   };
-  return { deps, delays };
+  return { deps, delays, scheduled };
 }
 
 const policy = (maxRetries: number, signal = new AbortController().signal) => ({
@@ -56,14 +58,15 @@ describe('callWithRetry', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('S28: times out on every attempt -> 4 attempts with max 3 and LLM_TIMEOUT', async () => {
+  it('times out on every attempt -> 4 attempts with max 3 and LLM_TIMEOUT', async () => {
     const fn = vi.fn(() => new Promise<string>(() => undefined)); // ignores the signal and never settles
-    const { deps, delays } = recordingDeps();
+    const { deps, delays, scheduled } = recordingDeps();
     const outcome = settle(callWithRetry(fn, policy(3), deps));
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS * 10);
     const result = await outcome;
     expect(fn).toHaveBeenCalledTimes(4);
     expect(delays).toHaveLength(3);
+    expect(scheduled).toEqual([TIMEOUT_MS, TIMEOUT_MS, TIMEOUT_MS, TIMEOUT_MS]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toBeInstanceOf(LlmCallFailure);
@@ -89,20 +92,62 @@ describe('callWithRetry', () => {
     if (!result.ok) expect(result.error).toMatchObject({ code: 'LLM_TIMEOUT', attempts: 1 });
   });
 
-  it('S29: timeout then success -> resolves after 2 attempts', async () => {
+  it('timeout then success -> resolves after 2 attempts', async () => {
     let calls = 0;
     const fn = vi.fn(() => {
       calls += 1;
       return calls === 1 ? new Promise<string>(() => undefined) : Promise.resolve('ok');
     });
-    const { deps } = recordingDeps();
+    const { deps, scheduled } = recordingDeps();
     const outcome = settle(callWithRetry(fn, policy(3), deps));
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS * 2);
     expect(await outcome).toEqual({ ok: true, value: 'ok' });
     expect(fn).toHaveBeenCalledTimes(2);
+    expect(scheduled).toEqual([TIMEOUT_MS, TIMEOUT_MS]);
   });
 
-  it('S30: rate limited uses the same schedule as unavailable and ends in LLM_RATE_LIMITED', async () => {
+  it('with default deps the attempt is not aborted at timeoutMs-1 and is aborted at timeoutMs', async () => {
+    let attemptSignal: AbortSignal | undefined;
+    const fn = vi.fn((signal: AbortSignal) => {
+      attemptSignal = signal;
+      return new Promise<string>(() => undefined);
+    });
+    const outcome = settle(callWithRetry(fn, policy(0), { random: () => 0.5 }));
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS - 1);
+    expect(attemptSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(attemptSignal?.aborted).toBe(true);
+    const result = await outcome;
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatchObject({ code: 'LLM_TIMEOUT', attempts: 1 });
+  });
+
+  it('with the default sleep, 503 then success resolves after the backoff elapses', async () => {
+    const fn = vi
+      .fn<(signal: AbortSignal) => Promise<string>>()
+      .mockRejectedValueOnce(new LlmError('unavailable', 'boom'))
+      .mockResolvedValueOnce('ok');
+    const outcome = settle(callWithRetry(fn, policy(3), { random: () => 0.5 }));
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fn).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await outcome).toEqual({ ok: true, value: 'ok' });
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it.each<[LlmErrorKind, number]>([
+    ['rejected', 1],
+    ['rate_limited', 3],
+    ['unavailable', 3],
+    ['network', 3],
+  ])('%s failures make %i attempt(s) with maxRetries=2', async (kind, attempts) => {
+    const { deps } = recordingDeps();
+    const fn = vi.fn().mockRejectedValue(new LlmError(kind, 'boom'));
+    await settle(callWithRetry(fn, policy(2), deps));
+    expect(fn).toHaveBeenCalledTimes(attempts);
+  });
+
+  it('rate limited uses the same schedule as unavailable and ends in LLM_RATE_LIMITED', async () => {
     const run = async (kind: LlmErrorKind) => {
       const { deps, delays } = recordingDeps(() => 0.3);
       const fn = vi.fn().mockRejectedValue(new LlmError(kind, 'boom'));
@@ -117,7 +162,7 @@ describe('callWithRetry', () => {
     if (!rate.result.ok) expect(rate.result.error).toMatchObject({ code: 'LLM_RATE_LIMITED', attempts: 4 });
   });
 
-  it.each<[LlmErrorKind]>([['unavailable'], ['network']])('S31: %s exhausted -> LLM_UNAVAILABLE', async (kind) => {
+  it.each<[LlmErrorKind]>([['unavailable'], ['network']])('%s exhausted -> LLM_UNAVAILABLE', async (kind) => {
     const { deps } = recordingDeps();
     const fn = vi.fn().mockRejectedValue(new LlmError(kind, 'boom'));
     const result = await settle(callWithRetry(fn, policy(2), deps));
@@ -126,7 +171,7 @@ describe('callWithRetry', () => {
     if (!result.ok) expect(result.error).toMatchObject({ code: 'LLM_UNAVAILABLE', attempts: 3 });
   });
 
-  it('S32: rejected -> 1 attempt and LLM_REQUEST_REJECTED', async () => {
+  it('rejected -> 1 attempt and LLM_REQUEST_REJECTED', async () => {
     const { deps, delays } = recordingDeps();
     const fn = vi.fn().mockRejectedValue(new LlmError('rejected', 'forbidden'));
     const result = await settle(callWithRetry(fn, policy(3), deps));
@@ -161,7 +206,7 @@ describe('callWithRetry', () => {
     expect(result).toEqual({ ok: false, error: boom });
   });
 
-  it('S33: backoff delays stay within 1000*2^n*(0.75..1.25)', async () => {
+  it('backoff delays stay within 1000*2^n*(0.75..1.25)', async () => {
     for (const random of [0, 0.5, 0.999999]) {
       const { deps, delays } = recordingDeps(() => random);
       const fn = vi.fn().mockRejectedValue(new LlmError('unavailable', 'boom'));
@@ -175,7 +220,7 @@ describe('callWithRetry', () => {
     }
   });
 
-  it('S34: run abort during an attempt cancels it and does not retry', async () => {
+  it('run abort during an attempt cancels it and does not retry', async () => {
     const run = new AbortController();
     let attemptSignal: AbortSignal | undefined;
     const fn = vi.fn((signal: AbortSignal) => {
@@ -197,7 +242,7 @@ describe('callWithRetry', () => {
     if (!result.ok) expect(result.error).toMatchObject({ code: 'INTERRUPTED', attempts: 1 });
   });
 
-  it('S34: run abort during backoff stops without another attempt', async () => {
+  it('run abort during backoff stops without another attempt', async () => {
     const run = new AbortController();
     const fn = vi.fn().mockRejectedValue(new LlmError('unavailable', 'boom'));
     // Real default sleep: it must wake up on abort instead of waiting for the delay.
@@ -224,10 +269,21 @@ describe('callWithRetry', () => {
 });
 
 describe('backoffDelayMs', () => {
-  it('maps random in [0,1) to base * [0.75, 1.25)', () => {
-    expect(backoffDelayMs(0, 0)).toBe(750);
-    expect(backoffDelayMs(0, 0.5)).toBe(1000);
-    expect(backoffDelayMs(2, 0.5)).toBe(4000);
-    expect(backoffDelayMs(1, 1)).toBe(2500);
+  it('stays within +-25% of the doubling base for any random in [0, 1]', () => {
+    for (const random of [0, 0.25, 0.5, 0.75, 1]) {
+      for (let n = 0; n < 5; n += 1) {
+        const base = 1000 * 2 ** n;
+        const delay = backoffDelayMs(n, random);
+        expect(delay).toBeGreaterThanOrEqual(base * 0.75);
+        expect(delay).toBeLessThanOrEqual(base * 1.25);
+      }
+    }
+  });
+
+  it('grows with the retry index for a fixed random and with random for a fixed index', () => {
+    for (let n = 0; n < 4; n += 1) {
+      expect(backoffDelayMs(n + 1, 0.5)).toBeGreaterThan(backoffDelayMs(n, 0.5));
+      expect(backoffDelayMs(n, 0.9)).toBeGreaterThan(backoffDelayMs(n, 0.1));
+    }
   });
 });

@@ -1,8 +1,6 @@
 import { ApiError, GenerateContentResponse, type Models } from '@google/genai';
-import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildPrompt } from '../../src/modules/analysis/application/build-prompt.js';
-import { requestedResponseSchema } from '../../src/modules/analysis/application/llm-response-schema.js';
 import { LlmError } from '../../src/modules/analysis/domain/llm-client.js';
 import { GeminiClient } from '../../src/modules/analysis/infrastructure/llm/gemini-client.js';
 import type { Log } from '../../src/modules/logs/domain/log.js';
@@ -32,6 +30,10 @@ function makeClient(generateContent: FakeModels['generateContent']) {
   return new GeminiClient({ model: 'gemini-test', models });
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('GeminiClient', () => {
   it('identifies provider and model', () => {
     const client = makeClient(vi.fn());
@@ -51,9 +53,12 @@ describe('GeminiClient', () => {
     expect(params.config).toMatchObject({
       systemInstruction: request.systemInstruction,
       responseMimeType: 'application/json',
-      responseJsonSchema: z.toJSONSchema(requestedResponseSchema),
       temperature: 0.2,
     });
+    // The schema sent to the model must describe the structure the response parser later enforces.
+    const schema = params.config?.responseJsonSchema as { type: string; properties: Record<string, unknown> };
+    expect(schema.type).toBe('object');
+    expect(Object.keys(schema.properties)).toEqual(expect.arrayContaining(['summary', 'findings']));
     expect(params.config?.abortSignal).toBe(signal);
     expect(JSON.stringify(params)).not.toContain('retryOptions');
     expect(params.config?.httpOptions).toBeUndefined();
@@ -129,7 +134,31 @@ describe('GeminiClient', () => {
     await expect(client.generate(request, controller.signal)).rejects.toBe(abortError);
   });
 
-  it('does not leak the API error message into a kind-only classification of aborts', async () => {
+  it('does not include the API error text in the failure message', async () => {
+    const client = makeClient(vi.fn().mockRejectedValue(new ApiError({ message: 'key=SECRET-KEY', status: 503 })));
+    const error = await client.generate(request, new AbortController().signal).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(LlmError);
+    expect((error as LlmError).message).not.toContain('SECRET-KEY');
+  });
+
+  it('the real SDK makes exactly one HTTP request per attempt (SDK retries disabled)', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: { code: 503, message: 'overloaded', status: 'UNAVAILABLE' } }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new GeminiClient({ model: 'gemini-test', apiKey: 'test-key' });
+    const error = await client.generate(request, new AbortController().signal).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(LlmError);
+    expect((error as LlmError).kind).toBe('unavailable');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('classifies an aborted call as an abort, not as an LlmError', async () => {
     const controller = new AbortController();
     controller.abort();
     const client = makeClient(vi.fn().mockRejectedValue(new Error('anything')));

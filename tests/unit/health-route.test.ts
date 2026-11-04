@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import type { ServiceRepository } from '../../src/modules/services/domain/service-repository.js';
-import { HEALTH_DB_TIMEOUT_MS } from '../../src/shared/http/health-route.js';
 
 const findByApiKey = vi.fn(() => Promise.resolve(null));
 const repo: ServiceRepository = { findByApiKey, findNamesByIds: () => Promise.resolve(new Map()) };
@@ -52,11 +51,17 @@ describe('GET /api/health', () => {
     expect(res.body).not.toContain('ECONNREFUSED');
   });
 
-  it('returns 503 when the database check hangs past the timeout', async () => {
+  it('keeps waiting at 1999 ms and answers 503 at 2000 ms when the database check hangs', async () => {
     await build(() => new Promise<void>(() => undefined)).ready();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const pending = app.inject({ method: 'GET', url: '/api/health' });
-    await vi.advanceTimersByTimeAsync(HEALTH_DB_TIMEOUT_MS);
+    let settled = false;
+    const pending = app.inject({ method: 'GET', url: '/api/health' }).then((res) => {
+      settled = true;
+      return res;
+    });
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
     const res = await pending;
     expect(res.statusCode).toBe(503);
     expect(res.json<{ error: { code: string } }>().error.code).toBe('SERVICE_UNAVAILABLE');

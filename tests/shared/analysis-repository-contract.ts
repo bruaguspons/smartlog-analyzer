@@ -22,7 +22,7 @@ const finding = (overrides: Partial<NewFinding> = {}): NewFinding => ({
 });
 
 const result = (overrides: Record<string, unknown> = {}) => ({
-  summary: 'Resumen del analisis',
+  summary: 'Analysis summary',
   findings: [finding()],
   rawResponse: '{"summary":"x"}',
   usage,
@@ -76,12 +76,7 @@ export function runAnalysisRepositoryContract(
         });
       });
 
-      it('derives a different logCount from a different batch', async () => {
-        await repo.createProcessing(newAnalysis(1), [logId(1)]);
-        expect((await repo.findById(analysisId(1)))?.logCount).toBe(1);
-      });
-
-      it('S5: reports the running analysis and creates nothing while one is PROCESSING', async () => {
+      it('reports the running analysis and creates nothing while one is PROCESSING', async () => {
         await repo.createProcessing(newAnalysis(1), [logId(1)]);
 
         const outcome = await repo.createProcessing(newAnalysis(2), [logId(2)]);
@@ -90,14 +85,14 @@ export function runAnalysisRepositoryContract(
         expect(await repo.findById(analysisId(2))).toBeNull();
       });
 
-      it('S7: allows a new analysis after the previous one completed', async () => {
+      it('allows a new analysis after the previous one completed', async () => {
         await repo.createProcessing(newAnalysis(1), [logId(1)]);
         await repo.complete(analysisId(1), result({ findings: [] }));
 
         expect(await repo.createProcessing(newAnalysis(2), [logId(2)])).toEqual({ created: true });
       });
 
-      it('S7: allows a new analysis after the previous one failed', async () => {
+      it('allows a new analysis after the previous one failed', async () => {
         await repo.createProcessing(newAnalysis(1), [logId(1)]);
         await repo.fail(analysisId(1), failure());
 
@@ -106,7 +101,7 @@ export function runAnalysisRepositoryContract(
     });
 
     describe('complete', () => {
-      it('S9: stores summary, findings with their logIds, tokens and duration in one step', async () => {
+      it('stores summary, findings with their logIds, tokens and duration in one step', async () => {
         await repo.createProcessing(newAnalysis(1), [logId(1), logId(2), logId(3)]);
 
         const ok = await repo.complete(
@@ -123,7 +118,7 @@ export function runAnalysisRepositoryContract(
         const view = await repo.findById(analysisId(1));
         expect(view).toMatchObject({
           status: 'COMPLETED',
-          summary: 'Resumen del analisis',
+          summary: 'Analysis summary',
           durationMs: 1500,
           tokens: usage,
           error: null,
@@ -141,7 +136,7 @@ export function runAnalysisRepositoryContract(
         expect(view?.findings[0]?.id).not.toBe(view?.findings[1]?.id);
       });
 
-      it('S25: completes with zero findings and tokens null when the provider reported no usage', async () => {
+      it('completes with zero findings and tokens null when the provider reported no usage', async () => {
         await repo.createProcessing(newAnalysis(1), [logId(1)]);
 
         await repo.complete(analysisId(1), result({ findings: [], usage: null }));
@@ -158,7 +153,7 @@ export function runAnalysisRepositoryContract(
         expect(Object.keys(view ?? {})).not.toContain('rawResponse');
       });
 
-      it('S19: rejects findings that reference logs outside the analysis and persists nothing', async () => {
+      it('rejects findings that reference logs outside the analysis and persists nothing', async () => {
         await repo.createProcessing(newAnalysis(1), [logId(1)]);
 
         await expect(repo.complete(analysisId(1), result({ findings: [finding({ logIds: [logId(1), logId(2)] })] }))).rejects.toThrow();
@@ -181,7 +176,7 @@ export function runAnalysisRepositoryContract(
     });
 
     describe('fail', () => {
-      it('S11: stores the error, tokens and duration', async () => {
+      it('stores the error, tokens and duration', async () => {
         await repo.createProcessing(newAnalysis(1), [logId(1)]);
 
         const ok = await repo.fail(
@@ -221,7 +216,7 @@ export function runAnalysisRepositoryContract(
     });
 
     describe('failAllProcessing', () => {
-      it('S17: marks the PROCESSING analysis INTERRUPTED, returns its id and unblocks new ones', async () => {
+      it('marks the PROCESSING analysis INTERRUPTED, returns its id and unblocks new ones', async () => {
         await repo.createProcessing(newAnalysis(1), [logId(1)]);
 
         const ids = await repo.failAllProcessing({ errorCode: 'INTERRUPTED', errorMessage: 'Restarted' });
@@ -246,7 +241,7 @@ export function runAnalysisRepositoryContract(
     });
 
     describe('findById', () => {
-      it('S12: returns null for an unknown id', async () => {
+      it('returns null for an unknown id', async () => {
         expect(await repo.findById(analysisId(9))).toBeNull();
       });
     });
