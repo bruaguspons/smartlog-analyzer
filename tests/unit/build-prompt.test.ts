@@ -30,9 +30,16 @@ describe('buildPrompt', () => {
     expect(parsed.map((p) => p.n)).toEqual([1, 2, 3]);
   });
 
-  it('asks for Spanish output and the JSON contract', () => {
+  it('is written in English and requires English output for the free-text fields', () => {
     const { systemInstruction } = buildPrompt([makeLog(1)]);
-    expect(systemInstruction).toMatch(/español/i);
+    expect(systemInstruction).toMatch(/^You are a system log analyst/);
+    expect(systemInstruction).toMatch(/ALWAYS (respond|answer|reply) in English/);
+    expect(systemInstruction).toMatch(/"summary", "description" and "suggestions"|summary.*description.*suggestions.*English|English.*summary.*description.*suggestions/s);
+    expect(systemInstruction).not.toMatch(/[áéíóúñ¿¡]/);
+  });
+
+  it('asks for the JSON contract', () => {
+    const { systemInstruction } = buildPrompt([makeLog(1)]);
     for (const key of ['summary', 'findings', 'category', 'severity', 'description', 'suggestions', 'logRefs']) {
       expect(systemInstruction).toContain(key);
     }
@@ -43,8 +50,9 @@ describe('buildPrompt', () => {
     expect(prompt.startsWith('<logs>\n')).toBe(true);
     expect(prompt.endsWith('\n</logs>')).toBe(true);
     expect(systemInstruction).toContain('<logs>');
-    expect(systemInstruction).toMatch(/datos/i);
-    expect(systemInstruction).toMatch(/nunca.*instrucciones/i);
+    expect(systemInstruction).toContain('</logs>');
+    expect(systemInstruction).toMatch(/untrusted data/i);
+    expect(systemInstruction).toMatch(/never (treat|follow|interpret)[^.]*instructions/i);
   });
 
   it('renders one JSON line per entry with the documented fields', () => {

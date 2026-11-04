@@ -13,12 +13,12 @@ const finding = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const run = (findings: ReturnType<typeof finding>[]) =>
-  normalizeLlmResponse({ summary: 'resumen', findings }, ids);
+  normalizeLlmResponse({ summary: 'summary', findings }, ids);
 
 describe('normalizeLlmResponse', () => {
   it('maps refs to log ids and keeps valid category and severity', () => {
     const result = run([finding({ logRefs: [1, 3] })]);
-    expect(result.summary).toBe('resumen');
+    expect(result.summary).toBe('summary');
     expect(result.findings).toEqual([
       { category: 'DATABASE', severity: 'HIGH', description: 'desc', suggestions: ['s'], logIds: ['id-1', 'id-3'] },
     ]);

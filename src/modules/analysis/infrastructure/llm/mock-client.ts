@@ -9,8 +9,8 @@ export interface MockClientOptions {
 }
 
 const GROUPS = [
-  { level: 'ERROR', severity: 'HIGH', label: 'errores' },
-  { level: 'FATAL', severity: 'CRITICAL', label: 'errores fatales' },
+  { level: 'ERROR', severity: 'HIGH', label: 'errors' },
+  { level: 'FATAL', severity: 'CRITICAL', label: 'fatal errors' },
 ] as const;
 
 const estimateTokens = (chars: number) => Math.ceil(chars / 4);
@@ -34,7 +34,7 @@ export class MockClient implements LlmClient {
         });
       });
     }
-    const text = this.behavior === 'invalid' ? 'respuesta simulada que no es JSON' : JSON.stringify(this.respond(request));
+    const text = this.behavior === 'invalid' ? 'simulated response that is not JSON' : JSON.stringify(this.respond(request));
     return Promise.resolve({
       text,
       usage: {
@@ -52,13 +52,13 @@ export class MockClient implements LlmClient {
       findings.push({
         category: 'APPLICATION_ERROR',
         severity: group.severity,
-        description: `Se detectaron ${String(refs.length)} logs con nivel ${group.level} (${group.label}) en el lote.`,
-        suggestions: ['Revisar la traza de los logs indicados y corregir la causa raíz.'],
+        description: `Detected ${String(refs.length)} logs with level ${group.level} (${group.label}) in the batch.`,
+        suggestions: ['Review the trace of the listed logs and fix the root cause.'],
         logRefs: refs,
       });
     }
     return {
-      summary: `Se analizaron ${String(request.entries.length)} logs y se identificaron ${String(findings.length)} grupos de errores (análisis simulado).`,
+      summary: `Analyzed ${String(request.entries.length)} logs and identified ${String(findings.length)} error groups (simulated analysis).`,
       findings,
     };
   }

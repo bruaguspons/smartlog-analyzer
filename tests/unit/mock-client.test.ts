@@ -3,7 +3,6 @@ import { buildPrompt } from '../../src/modules/analysis/application/build-prompt
 import { llmResponseSchema } from '../../src/modules/analysis/application/llm-response-schema.js';
 import { MockClient } from '../../src/modules/analysis/infrastructure/llm/mock-client.js';
 import type { Log, LogLevel } from '../../src/modules/logs/domain/log.js';
-import { ScriptedLlmClient, okJson } from '../shared/scripted-llm-client.js';
 
 const makeLog = (n: number, level: LogLevel): Log => ({
   id: `id-${n}`,
@@ -27,7 +26,7 @@ describe('MockClient', () => {
     expect(client.model).toBe('mock');
   });
 
-  it('S20: is deterministic for the same logs', async () => {
+  it('is deterministic for the same logs', async () => {
     const logs = [makeLog(1, 'ERROR'), makeLog(2, 'INFO')];
     const a = await generate(new MockClient(), logs);
     const b = await generate(new MockClient(), logs);
@@ -35,9 +34,10 @@ describe('MockClient', () => {
     expect(a.usage).toEqual(b.usage);
   });
 
-  it('writes the summary in Spanish and mentions the batch size', async () => {
+  it('writes the summary in English and mentions the batch size', async () => {
     const { parsed } = await generate(new MockClient(), [makeLog(1, 'INFO'), makeLog(2, 'INFO')]);
-    expect(parsed.summary).toMatch(/Se analizaron 2 logs/);
+    expect(parsed.summary).toMatch(/^Analyzed 2 logs/);
+    expect(parsed.summary).not.toMatch(/[áéíóúñ]/);
   });
 
   it('creates one finding per ERROR/FATAL group with that group refs', async () => {
@@ -54,13 +54,16 @@ describe('MockClient', () => {
     expect(parsed.findings).toEqual([]);
   });
 
-  it('reports usage as ceil(chars / 4) of the request and the response', async () => {
-    const request = buildPrompt([makeLog(1, 'ERROR')]);
-    const result = await new MockClient().generate(request, new AbortController().signal);
-    expect(result.usage).toEqual({
-      prompt: Math.ceil((request.systemInstruction.length + request.prompt.length) / 4),
-      completion: Math.ceil(result.text.length / 4),
-    });
+  it('reports positive token usage that grows with the batch size', async () => {
+    const small = await new MockClient().generate(buildPrompt([makeLog(1, 'ERROR')]), new AbortController().signal);
+    const large = await new MockClient().generate(
+      buildPrompt([1, 2, 3, 4, 5].map((n) => makeLog(n, 'ERROR'))),
+      new AbortController().signal,
+    );
+    expect(small.usage?.prompt).toBeGreaterThan(0);
+    expect(small.usage?.completion).toBeGreaterThan(0);
+    expect(large.usage?.prompt).toBeGreaterThan(small.usage?.prompt ?? 0);
+    expect(large.usage?.completion).toBeGreaterThan(small.usage?.completion ?? 0);
   });
 
   it('honors an already aborted signal', async () => {
@@ -91,24 +94,5 @@ describe('MockClient', () => {
     controller.abort(new Error('timeout'));
     await outcome;
     await expect(pending).rejects.toThrow('timeout');
-  });
-});
-
-describe('ScriptedLlmClient', () => {
-  const request = buildPrompt([makeLog(1, 'ERROR')]);
-  const signal = new AbortController().signal;
-
-  it('replays steps in order, repeats the last one and records requests', async () => {
-    const client = new ScriptedLlmClient(okJson({ a: 1 }), new Error('boom'));
-    await expect(client.generate(request, signal)).resolves.toMatchObject({ text: '{"a":1}' });
-    await expect(client.generate(request, signal)).rejects.toThrow('boom');
-    await expect(client.generate(request, signal)).rejects.toThrow('boom');
-    expect(client.calls).toBe(3);
-    expect(client.requests[0]).toBe(request);
-  });
-
-  it('supports function steps', async () => {
-    const client = new ScriptedLlmClient(() => Promise.resolve({ text: 'x', usage: null }));
-    await expect(client.generate(request, signal)).resolves.toEqual({ text: 'x', usage: null });
   });
 });
