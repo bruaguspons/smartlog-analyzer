@@ -1,5 +1,10 @@
 import { randomUUIDv7 } from 'node:crypto';
 import { buildApp } from './app.js';
+import { AnalysisRunner } from './modules/analysis/application/analysis-runner.js';
+import { recoverInterrupted } from './modules/analysis/application/recover-interrupted.js';
+import { createAnalysisRoutes } from './modules/analysis/http/analysis-routes.js';
+import { createLlmClient } from './modules/analysis/infrastructure/llm/create-llm-client.js';
+import { PrismaAnalysisRepository } from './modules/analysis/infrastructure/prisma-analysis-repository.js';
 import { createLogsRoutes } from './modules/logs/http/logs-routes.js';
 import { PrismaLogRepository } from './modules/logs/infrastructure/prisma-log-repository.js';
 import { PrismaServiceRepository } from './modules/services/infrastructure/prisma-service-repository.js';
@@ -19,16 +24,34 @@ try {
 }
 
 const prisma = createPrismaClient(config.databaseUrl);
+const logRepo = new PrismaLogRepository(prisma);
+const analysisRepo = new PrismaAnalysisRepository(prisma);
+const llm = createLlmClient(config.llm);
+const runner = new AnalysisRunner({
+  repo: analysisRepo,
+  llm,
+  policy: { timeoutMs: config.llm.timeoutMs, maxRetries: config.llm.maxRetries },
+  now: () => new Date(),
+});
 const app = buildApp({
   serviceRepository: new PrismaServiceRepository(prisma),
   checkDatabase: async () => {
     await prisma.$queryRaw`SELECT 1`;
   },
-  apiRoutes: [createLogsRoutes({ repo: new PrismaLogRepository(prisma), newId: randomUUIDv7, now: () => new Date() })],
+  apiRoutes: [
+    createLogsRoutes({ repo: logRepo, newId: randomUUIDv7, now: () => new Date() }),
+    createAnalysisRoutes({ logRepo, analysisRepo, runner, llm, newId: randomUUIDv7, now: () => new Date() }),
+  ],
   logLevel: config.logLevel,
 });
-// app.close() runs onClose hooks, so graceful shutdown disconnects the pool without touching the shutdown module.
+// One root hook with an explicit order (not several plugin hooks relying on close order): in-flight analyses
+// are aborted and closed as INTERRUPTED while the pool is still open, and only then is the pool disconnected.
 app.addHook('onClose', async () => {
+  try {
+    await runner.shutdown();
+  } catch (err) {
+    app.log.error({ err }, 'failed to shut down the analysis runner');
+  }
   try {
     await prisma.$disconnect();
   } catch (err) {
@@ -38,6 +61,8 @@ app.addHook('onClose', async () => {
 registerGracefulShutdown(app);
 
 try {
+  // Before listening: leftover PROCESSING rows of a dead process would make every POST answer 409 (D15).
+  await recoverInterrupted(analysisRepo, app.log);
   await app.listen({ port: config.port, host: config.host });
 } catch (err) {
   app.log.error(err);
