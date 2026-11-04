@@ -24,6 +24,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-smartlog}:${POSTGRES_PASSWORD:-smartlog}@db:5432/${POSTGRES_DB:-smartlog}
       SEED_ON_START: ${SEED_ON_START:-true}
       HOST: 0.0.0.0
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gemini-3.6-flash}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-30000}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
     depends_on:
       db:
         condition: service_healthy
