@@ -3,7 +3,7 @@ generator client {
   output              = "../src/shared/db/generated"
   importFileExtension = "js"
   moduleFormat        = "esm"
-  // Needed for the partial unique index on analyses (single in-flight analysis, D15).
+  // Needed for the partial unique index that allows a single in-flight analysis.
   previewFeatures     = ["partialIndexes"]
 }
 
@@ -97,7 +97,7 @@ model Analysis {
   /// Plain string in the database; the closed set lives in the domain (AnalysisErrorCode).
   errorCode        String?           @map("error_code")
   errorMessage     String?           @map("error_message")
-  /// Int instead of the MER's Long: BigInt does not serialize to JSON.
+  /// Int instead of Long (as in the original ER diagram): BigInt does not serialize to JSON.
   promptTokens     Int?              @map("prompt_tokens")
   completionTokens Int?              @map("completion_tokens")
   createdAt        DateTime          @map("created_at") @db.Timestamptz(3)
@@ -106,7 +106,7 @@ model Analysis {
   logs             AnalysisLog[]
   findings         AnalysisFinding[]
 
-  /// At most one row can be PROCESSING at a time (D15).
+  /// At most one row can be PROCESSING at a time; a second insert fails with a unique violation.
   @@unique([status], map: "analyses_single_processing", where: raw("status = 'PROCESSING'"))
   @@map("analyses")
 }
@@ -123,7 +123,7 @@ model AnalysisLog {
 }
 
 model AnalysisFinding {
-  /// Int instead of the MER's Long: BigInt does not serialize to JSON.
+  /// Int instead of Long (as in the original ER diagram): BigInt does not serialize to JSON.
   id          Int                     @id @default(autoincrement())
   analysisId  String                  @map("analysis_id") @db.Uuid
   category    AnalysisFindingCategory
