@@ -1,21 +1,16 @@
-import { randomUUIDv7 } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
-import { buildApp } from '../../src/app.js';
-import { AnalysisRunner } from '../../src/modules/analysis/application/analysis-runner.js';
+import type { Runtime } from '../../src/compose.js';
 import { recoverInterrupted } from '../../src/modules/analysis/application/recover-interrupted.js';
 import type { AnalysisRepository } from '../../src/modules/analysis/domain/analysis-repository.js';
-import { createAnalysisRoutes } from '../../src/modules/analysis/http/analysis-routes.js';
 import { PrismaAnalysisRepository } from '../../src/modules/analysis/infrastructure/prisma-analysis-repository.js';
-import { PrismaLogRepository } from '../../src/modules/logs/infrastructure/prisma-log-repository.js';
-import { PrismaServiceRepository } from '../../src/modules/services/infrastructure/prisma-service-repository.js';
 import { createPrismaClient } from '../../src/shared/db/prisma-client.js';
 import { analysisId, logId } from '../shared/analysis-repository-contract.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient, type ScriptStep } from '../shared/scripted-llm-client.js';
+import { authHeaders as headers, buildIntegrationRuntime, resetDatabase } from './support/integration-app.js';
 
 const prisma = createPrismaClient(inject('databaseUrl'));
 const analysisRepo = new PrismaAnalysisRepository(prisma);
-const headers = { 'x-api-key': 'key-1' };
 const silent = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
 interface Body {
@@ -24,26 +19,15 @@ interface Body {
 }
 
 let app: FastifyInstance;
-let runner: AnalysisRunner;
+let runner: Runtime['runner'];
 
-function build(repo: AnalysisRepository, ...script: ScriptStep[]): void {
-  const llm = new ScriptedLlmClient(...script);
-  runner = new AnalysisRunner({ repo, llm, policy: { timeoutMs: 30_000, maxRetries: 0 }, now: () => new Date() });
-  app = buildApp({
-    serviceRepository: new PrismaServiceRepository(prisma),
-    checkDatabase: () => Promise.resolve(),
-    apiRoutes: [
-      createAnalysisRoutes({
-        logRepo: new PrismaLogRepository(prisma),
-        analysisRepo: repo,
-        runner,
-        llm,
-        newId: randomUUIDv7,
-        now: () => new Date(),
-      }),
-    ],
-    logLevel: 'silent',
+function build(wrapAnalysisRepo: ((repo: AnalysisRepository) => AnalysisRepository) | undefined, ...script: ScriptStep[]): void {
+  const runtime = buildIntegrationRuntime({
+    prisma,
+    llm: new ScriptedLlmClient(...script),
+    ...(wrapAnalysisRepo && { wrapAnalysisRepo }),
   });
+  ({ app, runner } = runtime);
 }
 
 const post = () => app.inject({ method: 'POST', url: '/api/logs/analyze', headers, payload: {} });
@@ -58,8 +42,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await prisma.$executeRaw`TRUNCATE analyses, logs, services RESTART IDENTITY CASCADE`;
-  await prisma.service.create({ data: { name: 'svc', apiKey: 'key-1' } });
+  await resetDatabase(prisma);
   await prisma.log.createMany({
     data: [1, 2, 3].map((n) => ({
       id: logId(n),
@@ -77,8 +60,8 @@ afterEach(async () => {
 });
 
 describe('analysis flow against Postgres', () => {
-  it('S6: two simultaneous POSTs produce exactly one 202 and one 409 naming the winner', async () => {
-    build(analysisRepo, hangUntilAborted);
+  it('two simultaneous POSTs produce exactly one 202 and one 409 naming the winner', async () => {
+    build(undefined, hangUntilAborted);
 
     const results = await Promise.all([post(), post()]);
 
@@ -94,8 +77,8 @@ describe('analysis flow against Postgres', () => {
     expect(await prisma.analysisLog.count()).toBe(3);
   });
 
-  it('S7: a new analysis is accepted after the previous one reached a terminal state', async () => {
-    build(analysisRepo, okJson({ summary: 'Resumen', findings: [] }));
+  it('a new analysis is accepted after the previous one reached a terminal state', async () => {
+    build(undefined, okJson({ summary: 'Summary', findings: [] }));
     expect((await post()).statusCode).toBe(202);
     await runner.idle();
     expect(await prisma.analysis.count({ where: { status: 'COMPLETED' } })).toBe(1);
@@ -105,8 +88,8 @@ describe('analysis flow against Postgres', () => {
     expect(second.statusCode).toBe(202);
   });
 
-  it('S17: startup recovery closes leftover PROCESSING rows and unblocks POST', async () => {
-    build(analysisRepo, okJson({ summary: 'Resumen', findings: [] }));
+  it('startup recovery closes leftover PROCESSING rows and unblocks POST', async () => {
+    build(undefined, okJson({ summary: 'Summary', findings: [] }));
     await analysisRepo.createProcessing(
       { id: analysisId(1), provider: 'mock', model: 'mock', createdAt: new Date() },
       [logId(1)],
@@ -122,21 +105,21 @@ describe('analysis flow against Postgres', () => {
     expect((await post()).statusCode).toBe(202);
   });
 
-  it('S18: when saving the COMPLETED result fails nothing partial is stored and the analysis ends FAILED', async () => {
+  it('when saving the COMPLETED result fails nothing partial is stored and the analysis ends FAILED', async () => {
     const finding = { category: 'DATABASE', severity: 'HIGH', description: 'd', suggestions: [], logRefs: [1] };
     // Sabotage: add a finding that points at a log outside the analysis, which the repository rejects.
-    const sabotaged: AnalysisRepository = {
-      createProcessing: (a, ids) => analysisRepo.createProcessing(a, ids),
+    const sabotage = (repo: AnalysisRepository): AnalysisRepository => ({
+      createProcessing: (a, ids) => repo.createProcessing(a, ids),
       complete: (id, input) =>
-        analysisRepo.complete(id, {
+        repo.complete(id, {
           ...input,
           findings: [...input.findings, { category: 'OTHER', severity: 'LOW', description: 'x', suggestions: [], logIds: [logId(99)] }],
         }),
-      fail: (id, input) => analysisRepo.fail(id, input),
-      failAllProcessing: (input) => analysisRepo.failAllProcessing(input),
-      findById: (id) => analysisRepo.findById(id),
-    };
-    build(sabotaged, okJson({ summary: 'Resumen', findings: [finding] }, { prompt: 8, completion: 2 }));
+      fail: (id, input) => repo.fail(id, input),
+      failAllProcessing: (input) => repo.failAllProcessing(input),
+      findById: (id) => repo.findById(id),
+    });
+    build(sabotage, okJson({ summary: 'Summary', findings: [finding] }, { prompt: 8, completion: 2 }));
 
     const { id } = body(await post());
     await runner.idle();
