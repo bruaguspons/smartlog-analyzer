@@ -15,7 +15,7 @@ async function seeded(count: number) {
 describe('listLogs', () => {
   it('asks the repository for limit + 1 rows and passes filters and cursor through', async () => {
     const list = vi.fn((): Promise<Log[]> => Promise.resolve([]));
-    const repo: LogRepository = { create: vi.fn(), list };
+    const repo: LogRepository = { create: vi.fn(), list, countByServiceAndLevel: vi.fn() };
     const filters = { serviceId: 3, search: 'x' };
     const cursor = { timestamp: new Date(0), id: makeListLog(1).id };
 
@@ -72,6 +72,7 @@ describe('listLogs', () => {
     const repo: LogRepository = {
       create: vi.fn(),
       list: () => Promise.reject(new Error('db down')),
+      countByServiceAndLevel: vi.fn(),
     };
     await expect(listLogs({ filters: {}, limit: 1 }, { repo })).rejects.toThrow('db down');
   });

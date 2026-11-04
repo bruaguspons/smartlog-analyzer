@@ -33,13 +33,14 @@ const runner = new AnalysisRunner({
   policy: { timeoutMs: config.llm.timeoutMs, maxRetries: config.llm.maxRetries },
   now: () => new Date(),
 });
+const serviceRepo = new PrismaServiceRepository(prisma);
 const app = buildApp({
-  serviceRepository: new PrismaServiceRepository(prisma),
+  serviceRepository: serviceRepo,
   checkDatabase: async () => {
     await prisma.$queryRaw`SELECT 1`;
   },
   apiRoutes: [
-    createLogsRoutes({ repo: logRepo, newId: randomUUIDv7, now: () => new Date() }),
+    createLogsRoutes({ repo: logRepo, serviceRepo, newId: randomUUIDv7, now: () => new Date() }),
     createAnalysisRoutes({ logRepo, analysisRepo, runner, llm, newId: randomUUIDv7, now: () => new Date() }),
   ],
   logLevel: config.logLevel,

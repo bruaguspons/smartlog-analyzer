@@ -2,7 +2,7 @@ import type { PrismaClient } from '../../../shared/db/generated/client.js';
 import type { LogWhereInput } from '../../../shared/db/generated/models/Log.js';
 import type { LogFilters, LogPageRequest } from '../domain/log-filters.js';
 import type { Log, JsonObject } from '../domain/log.js';
-import type { LogRepository } from '../domain/log-repository.js';
+import type { LogCountGroup, LogRepository } from '../domain/log-repository.js';
 
 /** Postgres LIKE treats `\\`, `%` and `_` as special; escape them so the search is a literal. */
 export function escapeLike(value: string): string {
@@ -21,6 +21,21 @@ function toDomain(row: LogRow): Log {
     traceId: row.traceId,
     // Written only by this repository from a validated JSON object, so the narrow cast is safe.
     metadata: row.metadata as JsonObject | null,
+  };
+}
+
+/** Filter-to-where translation shared by every query so list and stats cannot drift. */
+function buildWhere(filters: LogFilters): LogWhereInput {
+  const { serviceId, level, from, to, traceId, search } = filters;
+  // Keys are added only when defined (exactOptionalPropertyTypes).
+  return {
+    ...(serviceId !== undefined && { serviceId }),
+    ...(level !== undefined && { level: { in: [...level] } }),
+    ...((from !== undefined || to !== undefined) && {
+      timestamp: { ...(from && { gte: from }), ...(to && { lte: to }) },
+    }),
+    ...(traceId !== undefined && { traceId }),
+    ...(search !== undefined && { message: { contains: escapeLike(search), mode: 'insensitive' } }),
   };
 }
 
@@ -48,17 +63,9 @@ export class PrismaLogRepository implements LogRepository {
   }
 
   async list(filters: LogFilters, page: LogPageRequest): Promise<Log[]> {
-    const { serviceId, level, from, to, traceId, search } = filters;
     const { cursor } = page;
-    // Keys are added only when defined (exactOptionalPropertyTypes).
     const where: LogWhereInput = {
-      ...(serviceId !== undefined && { serviceId }),
-      ...(level !== undefined && { level: { in: [...level] } }),
-      ...((from !== undefined || to !== undefined) && {
-        timestamp: { ...(from && { gte: from }), ...(to && { lte: to }) },
-      }),
-      ...(traceId !== undefined && { traceId }),
-      ...(search !== undefined && { message: { contains: escapeLike(search), mode: 'insensitive' } }),
+      ...buildWhere(filters),
       ...(cursor && {
         // Keyset over (timestamp DESC, id DESC). Kept in its own AND so it never clashes with `timestamp` above.
         AND: [
@@ -77,5 +84,14 @@ export class PrismaLogRepository implements LogRepository {
       take: page.take,
     });
     return rows.map(toDomain);
+  }
+
+  async countByServiceAndLevel(filters: LogFilters): Promise<LogCountGroup[]> {
+    const rows = await this.prisma.log.groupBy({
+      by: ['serviceId', 'level'],
+      where: buildWhere(filters),
+      _count: { _all: true },
+    });
+    return rows.map((r) => ({ serviceId: r.serviceId, level: r.level, count: r._count._all }));
   }
 }

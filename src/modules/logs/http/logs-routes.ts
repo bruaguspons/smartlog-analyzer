@@ -1,13 +1,17 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { UnauthorizedError } from '../../../shared/errors/app-error.js';
+import type { ServiceRepository } from '../../services/domain/service-repository.js';
+import { getLogStats } from '../application/get-log-stats.js';
 import { listLogs } from '../application/list-logs.js';
 import { ingestLog } from '../application/ingest-log.js';
 import type { LogRepository } from '../domain/log-repository.js';
 import { createIngestLogBodySchema, logResponseSchema } from './ingest-log-schema.js';
+import { logStatsQuerySchema, logStatsResponseSchema } from './log-stats-schema.js';
 import { listLogsQuerySchema, listLogsResponseSchema } from './list-logs-schema.js';
 
 export interface LogsRoutesDeps {
   repo: LogRepository;
+  serviceRepo: ServiceRepository;
   newId: () => string;
   now: () => Date;
 }
@@ -49,6 +53,19 @@ export function createLogsRoutes(deps: LogsRoutesDeps): FastifyPluginAsyncZod {
         const { limit, cursor, ...filters } = request.query;
         return listLogs({ filters, limit, cursor }, deps);
       },
+    );
+    // Registered next to `/logs`; any future `/logs/:id` must come after it.
+    api.get(
+      '/logs/stats',
+      {
+        schema: {
+          summary: 'Count logs by service and level',
+          tags: ['logs'],
+          querystring: logStatsQuerySchema,
+          response: { 200: logStatsResponseSchema },
+        },
+      },
+      (request) => getLogStats(request.query, deps),
     );
     return Promise.resolve();
   };

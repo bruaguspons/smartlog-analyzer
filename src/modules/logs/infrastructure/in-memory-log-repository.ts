@@ -1,6 +1,6 @@
 import type { LogFilters, LogPageRequest } from '../domain/log-filters.js';
 import type { Log } from '../domain/log.js';
-import type { LogRepository } from '../domain/log-repository.js';
+import type { LogCountGroup, LogRepository } from '../domain/log-repository.js';
 
 function matches(log: Log, f: LogFilters): boolean {
   return (
@@ -33,5 +33,16 @@ export class InMemoryLogRepository implements LogRepository {
       .sort(newestFirst)
       .filter((log) => !cursor || newestFirst(log, { ...log, ...cursor }) > 0);
     return Promise.resolve(rows.slice(0, page.take));
+  }
+
+  countByServiceAndLevel(filters: LogFilters): Promise<LogCountGroup[]> {
+    const groups = new Map<string, LogCountGroup>();
+    for (const { serviceId, level } of this.logs.filter((log) => matches(log, filters))) {
+      const key = `${serviceId}|${level}`;
+      const group = groups.get(key) ?? { serviceId, level, count: 0 };
+      group.count += 1;
+      groups.set(key, group);
+    }
+    return Promise.resolve([...groups.values()]);
   }
 }
