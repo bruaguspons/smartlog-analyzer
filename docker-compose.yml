@@ -29,9 +29,18 @@ services:
       LLM_MODEL: ${LLM_MODEL:-gemini-3.6-flash}
       LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-30000}
       LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-3}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       db:
         condition: service_healthy
+    # The slim image ships without curl/wget, so the probe uses Node's built-in fetch.
+    # A 503 from /api/health (database down) also marks the container unhealthy.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       - smartlog-net
 
