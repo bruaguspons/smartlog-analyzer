@@ -1,5 +1,15 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": false, "rootDir": "src", "outDir": "dist" },
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    // Solo el alias de src: el "@tests/*" heredado apunta fuera de src y, con
+    // una ruta así, tsc-alias resuelve los alias desde una carpeta equivocada
+    // cuando la carpeta del proyecto se llama igual que una carpeta de dist
+    // (por ejemplo /app en Docker, que coincide con dist/app) y deja los
+    // imports "@/..." sin reescribir.
+    "paths": { "@/*": ["./src/*"] }
+  },
   "include": ["src"]
 }
