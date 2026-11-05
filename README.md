@@ -38,6 +38,22 @@ LLM_PROVIDER=gemini
 GEMINI_API_KEY=<api-key>
 ```
 
+### Cómo obtener la API key de Gemini
+
+La key se genera gratis desde Google AI Studio, con una cuenta de Google:
+
+1. Entrar a [aistudio.google.com/apikey](https://aistudio.google.com/apikey) e iniciar sesión.
+2. Aceptar los términos de servicio. En una cuenta sin proyectos de Google Cloud, AI Studio crea un proyecto y una key por defecto. Si la cuenta ya tiene proyectos, hay que importar uno desde **Dashboard > Projects > Import projects** antes de crear la key.
+3. Crear la key en la página **API Keys** y copiarla en `GEMINI_API_KEY` dentro de `.env`.
+
+Notas:
+
+- Cada key pertenece a un proyecto de Google Cloud, que define la cuota y la facturación. Sin facturación configurada se usa el nivel gratuito, con límites de requests por minuto y por día; un proyecto importado puede necesitar verificación antes de usarlo. Si se superan los límites, Gemini responde `429` y la aplicación reintenta con backoff (ver [Llamada al LLM](ARCHITECTURE.md#llamada-al-llm)).
+- La aplicación lee solo `GEMINI_API_KEY` y se la pasa explícitamente al SDK; `GOOGLE_API_KEY` no se usa.
+- `.env` está en `.gitignore`: la key no se commitea. Si se filtra, se crea una nueva, se reemplaza en `.env` y se deshabilita la anterior desde la misma página de AI Studio.
+
+Guía oficial: [Using Gemini API keys](https://aistudio.google.com/docs/api-key).
+
 ## Uso de la API
 
 La documentación OpenAPI interactiva está en `/docs` (puerto 3000). Las rutas de la API, salvo `GET /api/health`, requieren el header `X-API-Key`. Los ejemplos de requests y las keys de desarrollo están en [docs/ejemplos-api.md](docs/ejemplos-api.md).

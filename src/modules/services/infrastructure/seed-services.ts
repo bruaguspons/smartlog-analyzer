@@ -1,11 +1,6 @@
-import type { PrismaClient } from '../../../shared/db/generated/client.js';
+import type { PrismaClient } from '@/shared/db/generated/client.js';
 
-/** Fixed development keys, documented in docs/ejemplos-api.md. Never use them outside local dev. */
-export const DEV_SERVICES = [
-  { name: 'payments-api', description: 'Dev service (active)', apiKey: 'dev-key-payments-0001', isActive: true },
-  { name: 'orders-api', description: 'Dev service (active)', apiKey: 'dev-key-orders-0002', isActive: true },
-  { name: 'legacy-batch', description: 'Dev service (inactive)', apiKey: 'dev-key-legacy-0003', isActive: false },
-] as const;
+import { DEV_SERVICES } from './dev-services.const.js';
 
 /** Idempotent: creates missing services by api_key and never overwrites existing rows. */
 export async function seedServices(prisma: PrismaClient): Promise<void> {

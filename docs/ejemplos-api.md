@@ -14,7 +14,21 @@ El seed crea tres servicios. Son valores de desarrollo, no secretos.
 
 ## Swagger UI
 
-En `/docs`, **Authorize** pide una key del seed; después, **Try it out** en cualquier endpoint envía el header `X-API-Key`. `GET /api/health` aparece sin candado porque no requiere key.
+Swagger UI no pide usuario ni contraseña: la autenticación es solo el header `X-API-Key`.
+
+1. Abrir `http://localhost:3000/docs`.
+2. Click en **Authorize** (arriba a la derecha).
+3. En el campo **Value** de `apiKey (apiKey)` pegar `dev-key-payments-0001` (o `dev-key-orders-0002` para actuar como `orders-api`).
+4. Click en **Authorize** y después en **Close**. Los candados de los endpoints quedan cerrados.
+5. En cualquier endpoint, **Try it out** -> completar parámetros -> **Execute**. Swagger envía el header `X-API-Key` con la key elegida.
+
+`GET /api/health` aparece sin candado porque no requiere key. Para probar el `401`, repetir el paso 3 con `dev-key-legacy-0003` (servicio inactivo) o con cualquier valor inventado. Para cambiar de key: **Authorize** -> **Logout** -> pegar la nueva.
+
+### Fechas en Swagger
+
+Swagger UI no tiene selector de fecha: `from` y `to` son campos de texto. El formato es ISO 8601 con zona horaria, por ejemplo `2026-11-01T10:00:00Z` o `2026-11-01T07:00:00-03:00`. Sin zona (`2026-11-01T10:00:00`) o solo con fecha (`2026-11-01`) responde `400 VALIDATION_ERROR`.
+
+Los campos vienen precargados con `from=2026-11-01T00:00:00Z` y `to=2026-11-01T23:59:59Z`. Ese rango cubre todos los logs de ejemplo del seed, que tienen fechas fijas entre `2026-11-01T10:00:00Z` y `2026-11-01T11:57:00Z` (no dependen de cuándo corrió el seed). Un test unitario verifica que sigan dentro del rango. Los logs que se ingesten después con otra fecha quedan fuera: para verlos hay que ajustar el rango o vaciar `from`/`to`.
 
 ## curl
 

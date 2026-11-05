@@ -136,7 +136,7 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
 - **Descartado:** procesamiento síncrono; cola externa (RabbitMQ, BullMQ + Redis).
 - **Por qué:** una llamada al LLM puede tardar decenas de segundos y no debería mantener abierto el request. `POST` responde `202` con el id y el cliente consulta el estado. Una cola externa daría reintentos y durabilidad, pero suma infraestructura que no se justifica en el prototipo.
 - **Consecuencias:**
-  - Cierre ordenado: el ejecutor lleva el registro de los análisis en curso. Al recibir `SIGTERM`, aborta cada llamada al LLM (sin más reintentos) y espera a que cada análisis quede en `FAILED` con `error_code = INTERRUPTED`; recién entonces se cierra el pool de la base. Un único hook `onClose` en la raíz de composición (`createRuntime` en `src/compose.ts`) fija ese orden.
+  - Cierre ordenado: el ejecutor lleva el registro de los análisis en curso. Al recibir `SIGTERM`, aborta cada llamada al LLM (sin más reintentos) y espera a que cada análisis quede en `FAILED` con `error_code = INTERRUPTED`; recién entonces se cierra el pool de la base. Un único hook `onClose` en la raíz de composición (`createRuntime` en `src/composition/create-runtime.ts`) fija ese orden.
   - Caídas: si el proceso muere sin pasar por el cierre ordenado, esos trabajos se pierden. Al arrancar, y antes de aceptar requests, los análisis que quedaron en `PROCESSING` se marcan `FAILED` con `INTERRUPTED`. Así ninguno queda colgado bloqueando nuevos análisis (ver [un solo análisis en curso](#un-solo-análisis-en-curso-a-la-vez)).
   - Escrituras condicionales: toda transición a un estado final es un compare-and-set (`WHERE status = 'PROCESSING'`), así que si compiten el cierre, la recuperación y el ejecutor, gana la primera escritura.
 
@@ -252,6 +252,7 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
 ### Plugins del ecosistema Fastify: adoptados y descartados
 
 - **Adoptados:** `fastify-type-provider-zod` (valida y serializa con zod), `@fastify/swagger` y `@fastify/swagger-ui` (OpenAPI en `/docs`, generado desde los esquemas zod) y `close-with-grace` (apagado ordenado ante señales y errores no capturados, con timeout forzado de 8 s).
+- **Esquemas recursivos en OpenAPI:** la conversión a OpenAPI se hace ruta por ruta y descarta los esquemas zod recursivos que no están registrados, así que el `metadata` JSON se registra con un id (`JsonValue`) para que se publique como componente; sin él, el documento queda con referencias que no resuelven y `/docs` falla.
 - **Descartados**, cada uno por una razón concreta:
   - `@fastify/rate-limit`: sin un productor de `429` en el alcance; queda como evolución (ver [Limitaciones y evolución](#limitaciones-y-evolución)).
   - `@fastify/env` y `env-schema`: la configuración ya se valida con zod al arrancar.
@@ -268,6 +269,20 @@ El hook de `X-API-Key` vive dentro de un plugin con prefijo `/api`. Una ruta des
 - **Por qué:** todos los campos JSON van en `camelCase` (`serviceId`, `traceId`, `nextCursor`). Coincide con los nombres de los tipos TypeScript y con el JSON nativo de JavaScript, y evita convertir nombres en cada borde. Las columnas siguen en `snake_case` y Prisma las mapea con `@map`.
 - **Descartado, `snake_case`:** lo recomiendan algunas guías de API y aparece en el legado de OpenTelemetry (`trace_id`). Obliga a mapear nombres en cada request y response, y mezclar ambas convenciones sería peor que cualquiera de las dos.
 - **Consecuencia:** el body de `POST /api/logs` es estricto. Un `trace_id` o un `serviceId` en el body se rechaza con `400`.
+
+### Estructura del proyecto: capas hexagonales por módulo, una carpeta por caso de uso
+
+- **Decisión:** cada módulo (`logs`, `analysis`, `services`) se divide en cuatro carpetas: `src/modules/<contexto>/domain/` (entidades, constantes y puertos, sin imports hacia afuera), `application/<caso-de-uso>/` (la lógica de cada caso de uso, por ejemplo `ingest-log`, `start-analysis`, `run-analysis`), `http/<caso-de-uso>/` (ruta, esquema zod y constantes propias del adaptador HTTP, con el mismo nombre de carpeta que su caso de uso) e `infrastructure/` (Prisma, LLM, seed). Lo que comparten varios casos de uso va en una carpeta propia por funcionalidad: `application/cursor/`, `application/llm-response/`, `http/log-filters/`, `http/pagination/`, `http/validation/` y `http/log-response/`. Lo que usa un solo caso de uso queda dentro de él (`application/run-analysis/prompt/` y `retry/`). Las dependencias van hacia adentro: `application/` nunca importa de `http/`, `http/` e `infrastructure/` pueden importar de `application/` y `domain/`, y `domain/` no importa de ninguna otra capa. Cada archivo exporta una sola función o clase, con el nombre del símbolo en kebab-case, y los sufijos `.types.ts`, `.const.ts`, `.schema.ts` y `.route.ts` separan tipos, constantes, esquemas zod y rutas. Los tests replican el árbol de `src/` y los dobles de prueba viven en `tests/support/`.
+- **Imports:** `@/` apunta a `src/` (y `@tests/` a `tests/`) mediante `paths` de TypeScript; en el build, `tsc-alias` los reescribe a rutas relativas, y Vitest y `tsx` los resuelven por su cuenta. Dentro de una misma carpeta se usa `./`; nunca `../`.
+- **Por qué:** separar el caso de uso de su adaptador HTTP permite probar la lógica sin Fastify y cambiar el transporte sin tocarla, y el nombre de cada caso de uso sigue visible en las dos capas. Un archivo corto por símbolo hace que el diff de una revisión muestre exactamente lo que cambió.
+- **Descartado:**
+  - Capas en el primer nivel (`controllers/`, `services/`, `repositories/`): dispersa un mismo caso de uso en varias carpetas y mezcla contextos distintos.
+  - Una sola carpeta por caso de uso con lógica, ruta y esquema juntos: la lógica quedaba acoplada al adaptador HTTP y no se veía qué dependencia apunta hacia dónde.
+  - Casos de uso planos dentro de `application/`: mezcla en una sola carpeta archivos de responsabilidades distintas; por eso cada uno tiene su subcarpeta.
+  - Tests junto al código: complica el `include` de Vitest y el build, que tendría que excluirlos de `dist/`.
+  - Tipos en archivos `.d.ts` propios: `skipLibCheck` los omite en la verificación, así que los errores pasarían sin avisar. Se usan `.types.ts`.
+  - Imports nativos `#/` (campo `imports` de `package.json`): exigen condiciones personalizadas en `tsc`, `tsx` y Vitest para apuntar a `src/` en desarrollo y a `dist/` en producción; el alias con `tsc-alias` es más simple.
+- **Consecuencias:** hay más archivos y carpetas; a cambio, cada archivo tiene una sola razón para cambiar. Los dos `LOG_LEVELS` (niveles de pino en `shared/config/env.const.ts` y `DEBUG..FATAL` en `modules/logs/domain/log.const.ts`) conservan su nombre y se distinguen por la ruta.
 
 ## Manejo de fallas
 

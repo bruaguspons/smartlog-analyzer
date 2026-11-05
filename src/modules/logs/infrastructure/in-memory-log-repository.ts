@@ -1,6 +1,6 @@
-import type { LogFilters, LogPageRequest } from '../domain/log-filters.js';
-import type { Log } from '../domain/log.js';
-import type { LogCountGroup, LogRepository } from '../domain/log-repository.js';
+import type { LogFilters, LogPageRequest } from '@/modules/logs/domain/log-filters.types.js';
+import type { Log } from '@/modules/logs/domain/log.types.js';
+import type { LogCountGroup, LogRepository } from '@/modules/logs/domain/log-repository.types.js';
 
 function matches(log: Log, f: LogFilters): boolean {
   return (

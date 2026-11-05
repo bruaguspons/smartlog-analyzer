@@ -12,34 +12,3 @@ export class AppError extends Error {
     if (details !== undefined) this.details = details;
   }
 }
-
-/** Same message for missing, unknown and inactive keys, so it reveals nothing. */
-export class UnauthorizedError extends AppError {
-  constructor() {
-    super(401, 'UNAUTHORIZED', 'Invalid or missing API key');
-  }
-}
-
-export class NotFoundError extends AppError {
-  constructor(message = 'Resource not found') {
-    super(404, 'NOT_FOUND', message);
-  }
-}
-
-export class ServiceUnavailableError extends AppError {
-  constructor(message: string, details?: unknown) {
-    super(503, 'SERVICE_UNAVAILABLE', message, details);
-  }
-}
-
-export class ConflictError extends AppError {
-  constructor(code: string, message: string, details?: unknown) {
-    super(409, code, message, details);
-  }
-}
-
-export class UnprocessableError extends AppError {
-  constructor(code: string, message: string) {
-    super(422, code, message);
-  }
-}

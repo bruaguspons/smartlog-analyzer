@@ -1,7 +1,7 @@
-import type { Config } from '../../../../shared/config/env.js';
-import type { LlmClient } from '../../domain/llm-client.js';
-import { GeminiClient } from './gemini-client.js';
-import { MockClient } from './mock-client.js';
+import type { Config } from '@/shared/config/config.types.js';
+import type { LlmClient } from '@/modules/analysis/domain/llm-client.types.js';
+import { GeminiClient } from '@/modules/analysis/infrastructure/llm/gemini/gemini-client.js';
+import { MockClient } from '@/modules/analysis/infrastructure/llm/mock/mock-client.js';
 
 /** Picks the adapter by `LLM_PROVIDER`. Config validation already guarantees the key; this is a guard. */
 export function createLlmClient(llm: Config['llm']): LlmClient {

@@ -1,5 +1,5 @@
-import type { Service } from '../domain/service.js';
-import type { ServiceRepository } from '../domain/service-repository.js';
+import type { Service } from '@/modules/services/domain/service.types.js';
+import type { ServiceRepository } from '@/modules/services/domain/service-repository.types.js';
 
 export class InMemoryServiceRepository implements ServiceRepository {
   private readonly services: readonly Service[];
