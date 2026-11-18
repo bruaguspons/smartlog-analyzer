@@ -16,6 +16,9 @@ export default defineConfig({
           name: 'unit',
           include: ['tests/unit/**/*.test.ts'],
           environment: 'node',
+          // Wired modules validate config when imported. An empty URL makes an accidental import from a
+          // unit test fail loudly instead of silently reaching a database.
+          env: { DATABASE_URL: '' },
         },
       },
       {
@@ -25,6 +28,7 @@ export default defineConfig({
           include: ['tests/integration/**/*.test.ts'],
           environment: 'node',
           globalSetup: ['tests/support/integration/global-setup.ts'],
+          setupFiles: ['tests/support/integration/env.ts'],
           // Files share one database, so they must run serially.
           fileParallelism: false,
           // Headroom for container startup (Testcontainers).
