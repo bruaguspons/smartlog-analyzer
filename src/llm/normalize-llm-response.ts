@@ -27,17 +27,20 @@ export function normalizeLlmResponse(response: LlmResponse, logIds: readonly str
   const warnings: string[] = [];
 
   const findings = response.findings.map((raw): NewFinding => {
+    // Map the category
     let category: FindingCategory | undefined = matchEnum(FINDING_CATEGORIES, raw.category);
     if (!category) {
       warnings.push(`Unknown category "${raw.category}" replaced by OTHER`);
       category = 'OTHER';
     }
+    // Map the severity
     let severity: FindingSeverity | undefined = matchEnum(FINDING_SEVERITIES, raw.severity);
     if (!severity) {
       warnings.push(`Unknown severity "${raw.severity}" replaced by MEDIUM`);
       severity = 'MEDIUM';
     }
 
+    // Map the log refs to ids
     const mapped = new Set<string>();
     for (const ref of raw.logRefs) {
       const id = Number.isInteger(ref) ? logIds[ref - 1] : undefined;

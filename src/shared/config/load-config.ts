@@ -71,10 +71,12 @@ const EnvSchema = z
 
 /** Parses and validates environment variables. Throws `ConfigError` when invalid. */
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
+  // Validate the environment
   const result = EnvSchema.safeParse(env);
   if (!result.success) {
     throw new ConfigError(result.error);
   }
+  // Map the variables to the config
   const parsed = result.data;
   return {
     port: parsed.PORT,

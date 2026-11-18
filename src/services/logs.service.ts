@@ -55,15 +55,18 @@ export const logsService = {
     const rows = await logRepository.list(query.filters, { take: query.limit + 1, cursor: query.cursor });
     const hasMore = rows.length > query.limit;
     const items = hasMore ? rows.slice(0, query.limit) : rows;
+    // Build the next cursor
     const last = items.at(-1);
     const nextCursor = hasMore && last ? encodeCursor({ timestamp: last.timestamp, id: last.id }) : null;
     return { items, nextCursor, hasMore };
   },
 
   async stats(filters: LogFilters): Promise<LogStats> {
+    // Count logs per service and level
     const counts = await logRepository.countByServiceAndLevel(filters);
     if (counts.length === 0) return { total: 0, groups: [] };
 
+    // Resolve the service names
     const names = await serviceRepository.findNamesByIds([...new Set(counts.map((c) => c.serviceId))]);
     const groups = counts.map((c): LogStatsGroup => {
       const name = names.get(c.serviceId);
@@ -71,6 +74,7 @@ export const logsService = {
       if (name === undefined) throw new Error(`Log stats: service ${c.serviceId} not found`);
       return { service: { id: c.serviceId, name }, level: c.level, count: c.count };
     });
+    // Order by service and level
     groups.sort(
       (a, b) => a.service.id - b.service.id || LOG_LEVELS.indexOf(a.level) - LOG_LEVELS.indexOf(b.level),
     );

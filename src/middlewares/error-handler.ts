@@ -29,6 +29,7 @@ const internal = (): ErrorResponse => ({
 
 /** Pure mapping from any thrown value to the HTTP status and error envelope. */
 export function toErrorResponse(error: unknown): ErrorResponse {
+  // Keep the status and details of app errors
   if (error instanceof AppError) {
     const { code, message, details } = error;
     return {
@@ -49,6 +50,7 @@ export function toErrorResponse(error: unknown): ErrorResponse {
     return { statusCode: 413, body: { error: { code: 'PAYLOAD_TOO_LARGE', message: TOO_LARGE_MESSAGE } } };
   }
 
+  // Keep other 4xx errors as client errors
   if (typeof statusCode === 'number' && Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 500) {
     return {
       statusCode,
@@ -70,6 +72,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
     return;
   }
   const { statusCode, body } = toErrorResponse(err);
+  // Log by severity
   if (err instanceof ResponseValidationError) {
     req.log.error({ err, issues: err.issues }, 'response serialization failed');
   } else if (statusCode >= 500) {

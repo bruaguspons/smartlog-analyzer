@@ -96,8 +96,10 @@ export async function callLlmWithRetry<T>(
   const maxAttempts = policy.maxRetries + 1;
 
   for (let attempt = 1; ; attempt += 1) {
+    // Stop if the run was interrupted
     if (policy.signal.aborted) throw new LlmCallFailure('INTERRUPTED', attempt - 1);
 
+    // Arm the per-attempt timeout
     const attemptController = new AbortController();
     let timedOut = false;
     const cancelTimer = deps.schedule(() => {
@@ -106,6 +108,7 @@ export async function callLlmWithRetry<T>(
     }, policy.timeoutMs);
     const signal = AbortSignal.any([policy.signal, attemptController.signal]);
 
+    // Run the attempt and classify the failure
     let kind: FailureKind;
     let cause: unknown;
     try {
@@ -123,10 +126,12 @@ export async function callLlmWithRetry<T>(
       cancelTimer();
     }
 
+    // Give up on rejections or the last attempt
     if (kind === 'rejected' || attempt >= maxAttempts) {
       throw new LlmCallFailure(CODE_BY_KIND[kind], attempt, { cause });
     }
 
+    // Wait before the next attempt
     try {
       await deps.sleep(backoffDelayMs(attempt - 1, deps.random()), policy.signal);
     } catch {

@@ -49,6 +49,7 @@ export const logRepository = {
    * strictly after `page.cursor` when given.
    */
   async list(filters: LogFilters, page: LogPageRequest): Promise<Log[]> {
+    // Build the filter and cursor condition
     const { cursor } = page;
     const where: LogWhereInput = {
       ...buildLogWhere(filters),
@@ -64,6 +65,7 @@ export const logRepository = {
         ],
       }),
     };
+    // Query the page
     const rows = await prisma.log.findMany({
       where,
       orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],

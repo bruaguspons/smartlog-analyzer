@@ -40,6 +40,7 @@ closeWithGrace({ delay: 8000, logger }, async ({ err, signal }) => {
 try {
   // Before listening: leftover PROCESSING rows of a dead process would make every POST answer 409.
   await recoverInterrupted(analysisRepository, logger);
+  // Start listening
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(config.port, config.host, () => {

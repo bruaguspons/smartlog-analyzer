@@ -11,9 +11,11 @@ import { logsService } from '@/services/logs.service.js';
 import { parseRequest, sendJson } from './request-io.js';
 
 const ingest: RequestHandler = async (req, res) => {
+  // Validate the body
   const body = parseRequest('body', ingestLogBodySchema, req.body);
   // The service comes from the API key, never from the body.
   const log = await logsService.ingest({ serviceId: res.locals.service.id, ...body });
+  // Reply with the created log
   sendJson(res, 201, logResponseSchema, log);
 };
 

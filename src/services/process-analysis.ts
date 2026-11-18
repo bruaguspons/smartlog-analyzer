@@ -98,8 +98,10 @@ export async function processAnalysis(
   signal: AbortSignal,
   log: JobLog,
 ): Promise<void> {
+  // Build the request from the prompt
   const request = buildPrompt(job.logs);
 
+  // Get the result
   let result;
   try {
     result = await callLlmWithRetry(
@@ -114,6 +116,7 @@ export async function processAnalysis(
     return;
   }
 
+  // Parse the result
   const { text: rawResponse, usage } = result;
   try {
     const response = parseResponse(rawResponse);
@@ -128,6 +131,7 @@ export async function processAnalysis(
     );
     for (const warning of warnings) log.warn({ analysisId: job.analysisId }, warning);
 
+    // Save the completed analysis
     await deps.repo.complete(job.analysisId, {
       summary,
       findings,

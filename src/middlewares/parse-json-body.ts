@@ -40,10 +40,13 @@ export function parseJsonBody({ rejectUnsupported = true }: ParseJsonBodyOptions
   const text = express.text({ limit: BODY_LIMIT_BYTES, type: () => true });
 
   return (req, res, next) => {
+    // Read the media type
     const contentType = req.headers['content-type'];
     const mediaType = contentType?.split(';')[0]?.trim().toLowerCase();
+    // Pick the parser by media type
     if (mediaType === 'application/json') return json(req, res, next);
     if (mediaType === 'text/plain') return text(req, res, next);
+    // Reject bodies that are neither JSON nor text
     if (rejectUnsupported && (contentType !== undefined || hasBody(req))) {
       return next(new AppError(415, 'VALIDATION_ERROR', 'Unsupported Media Type'));
     }

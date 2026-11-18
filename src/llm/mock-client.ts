@@ -26,6 +26,7 @@ export class MockClient implements LlmClient {
 
   generate(request: LlmRequest, signal: AbortSignal): Promise<LlmResult> {
     if (signal.aborted) return Promise.reject(signal.reason as Error);
+    // Hang until aborted
     if (this.behavior === 'timeout') {
       return new Promise<LlmResult>((_resolve, reject) => {
         signal.addEventListener('abort', () => {
@@ -33,6 +34,7 @@ export class MockClient implements LlmClient {
         });
       });
     }
+    // Build the simulated answer
     const text = this.behavior === 'invalid' ? 'simulated response that is not JSON' : JSON.stringify(this.respond(request));
     return Promise.resolve({
       text,

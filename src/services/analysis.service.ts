@@ -19,11 +19,13 @@ export const analysisService = {
    * anything is written, and the single-in-flight rule is decided by the insert itself.
    */
   async start(query: ListLogsQuery, log: JobLog): Promise<StartedAnalysis> {
+    // Load the page to analyze
     const page = await logsService.list(query);
     if (page.items.length === 0) {
       throw new UnprocessableError('NO_LOGS_TO_ANALYZE', 'The filters match no logs to analyze');
     }
 
+    // Create the processing row
     const createdAt = new Date();
     const id = randomUUIDv7();
     const outcome = await analysisRepository.createProcessing(

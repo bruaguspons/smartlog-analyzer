@@ -107,6 +107,7 @@ export const analysisRepository = {
    */
   complete(id: string, input: CompleteInput): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
+      // Mark the analysis completed
       const { count } = await tx.analysis.updateMany({
         where: { id, status: 'PROCESSING' },
         data: {
@@ -128,6 +129,7 @@ export const analysisRepository = {
         throw new Error('A finding references a log outside the analysis');
       }
 
+      // Insert the findings
       for (const finding of input.findings) {
         await tx.analysisFinding.create({
           data: {

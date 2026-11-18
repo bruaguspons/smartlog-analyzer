@@ -36,6 +36,7 @@ export class GeminiClient implements LlmClient {
   }
 
   async generate(request: LlmRequest, signal: AbortSignal): Promise<LlmResult> {
+    // Call the model
     let response;
     try {
       response = await this.models.generateContent({
@@ -59,6 +60,7 @@ export class GeminiClient implements LlmClient {
       throw new LlmError('network', 'Gemini request failed before a response was received', { cause: error });
     }
 
+    // Map the text and token usage
     const usage = response.usageMetadata;
     return {
       text: response.text ?? '',

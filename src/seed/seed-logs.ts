@@ -32,8 +32,10 @@ export function buildSampleLogs(ids: SampleServiceIds, deps: SeedLogsDeps): Log[
  * guards an invariant with a unique index).
  */
 export async function seedLogs(prisma: PrismaClient, deps: SeedLogsDeps): Promise<number> {
+  // Skip when logs already exist
   if ((await prisma.log.count()) > 0) return 0;
 
+  // Find the dev services
   const { payments, orders } = DEV_API_KEYS;
   const rows = await prisma.service.findMany({
     where: { apiKey: { in: [payments, orders] } },
@@ -45,6 +47,7 @@ export async function seedLogs(prisma: PrismaClient, deps: SeedLogsDeps): Promis
     throw new Error('Dev services are missing: run seedServices before seedLogs');
   }
 
+  // Insert the sample logs
   const logs = buildSampleLogs({ payments: paymentsId, orders: ordersId }, deps);
   const result = await prisma.log.createMany({
     data: logs.map(({ metadata, ...log }) => ({
