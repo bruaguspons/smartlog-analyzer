@@ -11,7 +11,7 @@ flowchart LR
 
     subgraph App["smartlog-analyzer (Node + Express)"]
         AUTH[Middleware de autenticación<br/>X-API-Key]
-        ROUTES[Routers (src/routes) y controladores<br/>validación con zod]
+        ROUTES["Routers (src/routes) y controladores<br/>validación con zod"]
         LOGS[Servicio de logs]
         ANA[Servicio de análisis]
         RUNNER["Ejecutor de análisis (AnalysisRunner)<br/>asíncrono en proceso"]
