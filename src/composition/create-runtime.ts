@@ -1,14 +1,9 @@
 import { createServer, type Server } from 'node:http';
 import type { Express } from 'express';
 import type { Logger } from 'pino';
-import { createApp } from '@/app/create-app.js';
-import { healthRepository } from '@/repositories/health.repository.js';
+import { app } from '@/app.js';
 import { analysisRepository } from '@/repositories/analysis.repository.js';
-import { serviceRepository } from '@/repositories/service.repository.js';
-import { createApiRoutes } from '@/routes/api.routes.js';
 import { analysisRunner, recoverInterrupted, type AnalysisRunner } from '@/services/analysis-runner.js';
-import { analysisService } from '@/services/analysis.service.js';
-import { logsService } from '@/services/logs.service.js';
 import { config } from '@/shared/config/config.js';
 import { prisma } from '@/shared/db/prisma.js';
 import { logger } from '@/shared/logger.js';
@@ -26,13 +21,6 @@ export interface Runtime {
 
 /** Wires the application from the module singletons without listening or touching process-level state. */
 export function createRuntime(): Runtime {
-  const routes = createApiRoutes({
-    logs: logsService,
-    analysis: analysisService,
-    checkDatabase: () => healthRepository.ping(),
-    now: () => new Date(),
-  });
-  const app = createApp({ logger, serviceRepo: serviceRepository, routes });
   const server = createServer(app);
   const runner = analysisRunner;
 

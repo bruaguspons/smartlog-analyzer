@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRuntime } from '@/composition/create-runtime.js';
+import { app } from '@/app.js';
 import { analysisRepository } from '@/repositories/analysis.repository.js';
 import { analysisRunner, recoverInterrupted } from '@/services/analysis-runner.js';
 import { prisma } from '@/shared/db/prisma.js';
@@ -12,7 +12,6 @@ import { scriptedLlm } from '@tests/support/integration/scripted-llm.js';
 
 vi.mock('@/llm/llm.js', async () => (await import('@tests/support/fakes/scripted-llm-module.js')).scriptedLlmModule());
 
-const { app } = createRuntime();
 const llm = scriptedLlm();
 const silent = { info: () => undefined, warn: () => undefined, error: () => undefined };
 

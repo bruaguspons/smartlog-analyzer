@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeCursor } from '@/shared/cursor.js';
-import { createIngestLogBodySchema, listLogsQuerySchema } from '@/schemas/logs.schema.js';
+import { createIngestLogBodySchema, ingestLogBodySchema, listLogsQuerySchema } from '@/schemas/logs.schema.js';
 
 const NOW = new Date('2026-11-03T12:00:00.000Z');
 const schema = createIngestLogBodySchema(() => NOW);
@@ -154,5 +154,13 @@ describe('listLogsQuerySchema', () => {
     const r = parse({ from: '2026-01-02T00:00:00Z', to: '2026-01-01T00:00:00Z' });
     expect(r.success).toBe(false);
     expect(r.error?.issues[0]?.path).toEqual(['from']);
+  });
+});
+
+describe('ingestLogBodySchema', () => {
+  it('reads the real clock: now is accepted, a timestamp far in the future is not', () => {
+    expect(ingestLogBodySchema.safeParse({ ...valid, timestamp: new Date().toISOString() }).success).toBe(true);
+    const future = new Date(Date.now() + 3_600_000).toISOString();
+    expect(ingestLogBodySchema.safeParse({ ...valid, timestamp: future }).success).toBe(false);
   });
 });

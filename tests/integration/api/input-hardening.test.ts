@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createRuntime } from '@/composition/create-runtime.js';
+import { app } from '@/app.js';
 import { prisma } from '@/shared/db/prisma.js';
 import { resetDatabaseWithService } from '@tests/support/integration/database.js';
 import { authHeaders } from '@tests/support/integration/integration-app.js';
@@ -10,7 +10,6 @@ import { authHeaders } from '@tests/support/integration/integration-app.js';
  * validation with a 400 envelope, so they never reach the database or surface as a 500.
  */
 
-const { app } = createRuntime();
 
 interface ErrorBody {
   error: { code: string };

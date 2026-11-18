@@ -51,6 +51,9 @@ export function createIngestLogBodySchema(now: () => Date) {
   });
 }
 
+/** The body schema the API uses: the future-skew rule reads the real clock. */
+export const ingestLogBodySchema = createIngestLogBodySchema(() => new Date());
+
 export const logResponseSchema = z.object({
   id: z.uuid(),
   serviceId: z.number().int(),

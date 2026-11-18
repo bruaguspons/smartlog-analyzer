@@ -9,7 +9,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { createRuntime, type Runtime } from '@/composition/create-runtime.js';
+import { app } from '@/app.js';
 import { LlmError } from '@/llm/llm-client.js';
 import { analysisRepository as repo } from '@/repositories/analysis.repository.js';
 import type { AnalysisRunner } from '@/services/analysis-runner.js';
@@ -49,7 +49,6 @@ interface AnalysisBody {
 }
 
 const llm = scriptedLlm();
-let runtime: Runtime;
 /** The runner serving this test; `analysisRunner` is routed to it (see `useFreshRunner`). */
 let runner: AnalysisRunner;
 
@@ -62,11 +61,10 @@ function build(
 ): void {
   llm.reset(...script);
   runner = useFreshRunner({ timeoutMs: TIMEOUT_MS, ...options });
-  runtime = createRuntime();
 }
 
 const analyze = (payload: object = {}) =>
-  request(runtime.app).post("/api/logs/analyze").set(headers).send(payload);
+  request(app).post("/api/logs/analyze").set(headers).send(payload);
 
 /** Starts an analysis, expects 202, waits for its terminal write and returns the started body. */
 async function run(payload: object = {}): Promise<Started> {
@@ -97,7 +95,7 @@ const analysisLogIds = async (id: string) =>
   ).map((l) => l.logId);
 
 async function view(id: string): Promise<AnalysisBody> {
-  const res = await request(runtime.app).get(`/api/analysis/${id}`).set(headers);
+  const res = await request(app).get(`/api/analysis/${id}`).set(headers);
   expect(res.status).toBe(200);
   return res.body as AnalysisBody;
 }
@@ -288,7 +286,7 @@ describe("LLM outcomes persisted in Postgres", () => {
   it("an unknown analysis id is a 404 envelope", async () => {
     build({}, okJson({ summary: "s", findings: [] }));
 
-    const res = await request(runtime.app).get(`/api/analysis/${analysisId(404)}`).set(headers);
+    const res = await request(app).get(`/api/analysis/${analysisId(404)}`).set(headers);
 
     expect(res.status).toBe(404);
     expect((res.body as { error: { code: string } }).error.code).toBe("NOT_FOUND");
@@ -378,7 +376,9 @@ describe("shutdown", () => {
     await waitUntil(() => llm.calls === 1);
     expect((await dbRow(id)).status).toBe("PROCESSING");
 
-    await runtime.close();
+    // What server.ts does on a signal, in the same order: the runner closes its jobs before the pool goes.
+    await runner.shutdown();
+    await prisma.$disconnect();
 
     expect(await dbRow(id)).toMatchObject({
       status: "FAILED",
@@ -414,7 +414,7 @@ describe("cursor continuation through analyze", () => {
     const listed: string[] = [];
     let cursor = "";
     for (;;) {
-      const res = await request(runtime.app).get(`/api/logs?limit=2${cursor}`).set(headers);
+      const res = await request(app).get(`/api/logs?limit=2${cursor}`).set(headers);
       const page = res.body as {
         items: { id: string }[];
         hasMore: boolean;
@@ -494,7 +494,7 @@ describe("filters through analyze match GET /api/logs", () => {
 
     const { id } = await run(payload);
 
-    const res = await request(runtime.app).get(`/api/logs?limit=200&${query}`).set(headers);
+    const res = await request(app).get(`/api/logs?limit=200&${query}`).set(headers);
     const expected = (res.body as { items: { id: string }[] }).items
       .map((i) => i.id)
       .sort();

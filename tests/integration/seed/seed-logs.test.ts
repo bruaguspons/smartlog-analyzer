@@ -1,7 +1,7 @@
 import { randomUUIDv7 } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createRuntime } from '@/composition/create-runtime.js';
+import { app } from '@/app.js';
 import { SAMPLE_LOG_COUNT } from '@/seed/sample-logs.const.js';
 import { seedLogs } from '@/seed/seed-logs.js';
 import { DEV_SERVICES, seedServices } from '@/seed/seed-services.js';
@@ -65,7 +65,6 @@ describe('seedLogs', () => {
 
   it('the seeded logs are served by GET /api/logs with a seeded key, and serviceId narrows them to one service', async () => {
     await seedLogs(prisma, deps);
-    const { app } = createRuntime();
     const headers = { 'x-api-key': DEV_SERVICES[0].apiKey };
     const all = (await request(app).get('/api/logs?limit=200').set(headers)).body as Page;
     const payments = await prisma.service.findUniqueOrThrow({ where: { apiKey: DEV_SERVICES[0].apiKey } });

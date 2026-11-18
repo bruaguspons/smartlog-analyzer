@@ -1,12 +1,11 @@
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createRuntime } from '@/composition/create-runtime.js';
+import { app } from '@/app.js';
 import { prisma } from '@/shared/db/prisma.js';
 import { logId } from '@tests/support/fixtures.js';
 import { resetDatabaseWithService } from '@tests/support/integration/database.js';
 import { authHeaders } from '@tests/support/integration/integration-app.js';
 
-const { app } = createRuntime();
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const BASE = Date.parse('2026-11-04T09:00:00.000Z');

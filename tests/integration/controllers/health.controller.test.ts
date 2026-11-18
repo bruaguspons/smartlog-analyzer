@@ -1,15 +1,14 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRuntime, type Runtime } from '@/composition/create-runtime.js';
+import { app } from '@/app.js';
 import { healthRepository } from '@/repositories/health.repository.js';
 import { serviceRepository } from '@/repositories/service.repository.js';
 import { prisma } from '@/shared/db/prisma.js';
 import { resetDatabaseWithService } from '@tests/support/integration/database.js';
 
-/** The app over the real database; `ping` is replaced only when a test needs the database to fail or hang. */
-function build(ping?: () => Promise<void>): Runtime {
-  if (ping) vi.spyOn(healthRepository, 'ping').mockImplementation(ping);
-  return createRuntime();
+/** `ping` is replaced only when a test needs the database to fail or hang. */
+function failPing(ping: () => Promise<void>): void {
+  vi.spyOn(healthRepository, 'ping').mockImplementation(ping);
 }
 
 beforeAll(async () => {
@@ -33,7 +32,7 @@ describe('GET /api/health against Postgres', () => {
   it('returns 200 ok when the database answers, without an API key', async () => {
     const findByApiKey = vi.spyOn(serviceRepository, 'findByApiKey');
 
-    const res = await request(build().app).get('/api/health');
+    const res = await request(app).get('/api/health');
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'ok', database: 'ok' });
@@ -43,16 +42,16 @@ describe('GET /api/health against Postgres', () => {
   it('ignores an invalid API key (public route)', async () => {
     const findByApiKey = vi.spyOn(serviceRepository, 'findByApiKey');
 
-    const res = await request(build().app).get('/api/health').set('x-api-key', 'unknown');
+    const res = await request(app).get('/api/health').set('x-api-key', 'unknown');
 
     expect(res.status).toBe(200);
     expect(findByApiKey).not.toHaveBeenCalled();
   });
 
   it('returns 503 SERVICE_UNAVAILABLE in the error envelope when the database fails', async () => {
-    const check = () => Promise.reject(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
+    failPing(() => Promise.reject(new Error('connect ECONNREFUSED 10.0.0.1:5432')));
 
-    const res = await request(build(check).app).get('/api/health');
+    const res = await request(app).get('/api/health');
 
     expect(res.status).toBe(503);
     expect(res.body).toEqual({
@@ -64,7 +63,7 @@ describe('GET /api/health against Postgres', () => {
   it('keeps waiting at 1999 ms and answers 503 at 2000 ms when the database check hangs', async () => {
     let reached!: () => void;
     const checkReached = new Promise<void>((resolve) => (reached = resolve));
-    const { app } = build(() => {
+    failPing(() => {
       reached();
       return new Promise<void>(() => undefined);
     });

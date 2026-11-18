@@ -1,23 +1,16 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
-import type { RouteDefinition } from '@/routes/mount-routes.js';
+import { parseJsonBody } from '@/middlewares/parse-json-body.js';
 import { buildTestApp } from '@tests/support/apps/express-test-app.js';
 
-const echo: RouteDefinition = {
-  method: 'post',
-  path: '/echo',
-  summary: 'echoes the parsed body',
-  tags: [],
-  public: true,
-  request: { body: z.unknown() },
-  responses: { 200: z.unknown() },
-  handler: (req, res) => {
-    const body: unknown = req.body;
-    res.json({ received: body === undefined ? 'nothing' : body });
-  },
-};
-const app = () => buildTestApp({ routes: [echo] });
+const app = () =>
+  buildTestApp({
+    mount: (router) =>
+      router.post('/echo', parseJsonBody(), (req, res) => {
+        const body: unknown = req.body;
+        res.json({ received: body === undefined ? 'nothing' : body });
+      }),
+  });
 const post = () => request(app()).post('/api/echo');
 const code = (res: { body: unknown }) => (res.body as { error: { code: string; message: string } }).error;
 

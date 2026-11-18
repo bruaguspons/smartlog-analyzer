@@ -1,11 +1,11 @@
-import type { Request, RequestHandler, Response } from 'express';
+import type { Request, RequestHandler, Response, Router } from 'express';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ResponseValidationError } from '@/controllers/request-io.js';
 import { sendJson } from '@/controllers/request-io.js';
 import { errorHandler, toErrorResponse } from '@/middlewares/error-handler.js';
-import type { RouteDefinition } from '@/routes/mount-routes.js';
+import { parseJsonBody } from '@/middlewares/parse-json-body.js';
 import { AppError } from '@/shared/errors.js';
 import { buildTestApp } from '@tests/support/apps/express-test-app.js';
 
@@ -59,24 +59,15 @@ describe('toErrorResponse', () => {
 });
 
 describe('error middleware', () => {
-  const route = (path: string, handler: RequestHandler, extra: Partial<RouteDefinition> = {}): RouteDefinition => ({
-    method: 'get',
-    path,
-    summary: path,
-    tags: [],
-    public: true,
-    responses: { 200: z.unknown() },
-    handler,
-    ...extra,
-  });
-  const build = (routes: RouteDefinition[], logStream?: { write(m: string): void }) =>
-    buildTestApp({ routes, ...(logStream && { logStream }) });
+  const build = (mount: (router: Router) => void, logStream?: { write(m: string): void }) =>
+    buildTestApp({ mount, ...(logStream && { logStream }) });
+  const get = (path: string, handler: RequestHandler) => (router: Router) => router.get(path, handler);
 
   const level = (lines: string[], wanted: number) =>
     lines.map((l) => JSON.parse(l) as { level: number; err?: { message: string; stack: string } }).find((l) => l.level === wanted);
 
   it('an unknown route is 404 NOT_FOUND with no details key', async () => {
-    const res = await request(build([])).get('/does-not-exist');
+    const res = await request(build(() => undefined)).get('/does-not-exist');
     expect(res.status).toBe(404);
     expect(res.headers['content-type']).toMatch(/^application\/json/);
     const { error } = res.body as { error: Record<string, unknown> };
@@ -85,20 +76,20 @@ describe('error middleware', () => {
   });
 
   it('a thrown AppError passes through with its details', async () => {
-    const app = build([route('/conflict', () => { throw new AppError(409, 'ANALYSIS_IN_PROGRESS', 'busy', { id: 'x' }); })]);
+    const app = build(get('/conflict', () => { throw new AppError(409, 'ANALYSIS_IN_PROGRESS', 'busy', { id: 'x' }); }));
     const res = await request(app).get('/api/conflict');
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ error: { code: 'ANALYSIS_IN_PROGRESS', message: 'busy', details: { id: 'x' } } });
   });
 
   it('an async handler that rejects is handled too', async () => {
-    const app = build([route('/later', () => Promise.reject(new AppError(409, 'X', 'busy')))]);
+    const app = build(get('/later', () => Promise.reject(new AppError(409, 'X', 'busy'))));
     expect((await request(app).get('/api/later')).status).toBe(409);
   });
 
   it('an unexpected error is a generic 500 without leaks, and the original is logged with its stack', async () => {
     const lines: string[] = [];
-    const app = build([route('/boom', () => { throw new Error('db password=secret at /srv/x'); })], { write: (m) => lines.push(m) });
+    const app = build(get('/boom', () => { throw new Error('db password=secret at /srv/x'); }), { write: (m) => lines.push(m) });
     const res = await request(app).get('/api/boom');
     expect(res.status).toBe(500);
     expect(res.body).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
@@ -111,7 +102,7 @@ describe('error middleware', () => {
   it('a response schema mismatch is a generic 500, no leak, error logged', async () => {
     const lines: string[] = [];
     const app = build(
-      [route('/r', (_req, res) => { sendJson(res, 200, z.object({ id: z.string() }), { id: 1 } as unknown as { id: string }); })],
+      get('/r', (_req, res) => { sendJson(res, 200, z.object({ id: z.string() }), { id: 1 } as unknown as { id: string }); }),
       { write: (m) => lines.push(m) },
     );
     const res = await request(app).get('/api/r');
@@ -131,7 +122,7 @@ describe('error middleware', () => {
 
   it('rejections that are not server faults are logged at info, not error', async () => {
     const lines: string[] = [];
-    const app = build([], { write: (m) => lines.push(m) });
+    const app = build(() => undefined, { write: (m) => lines.push(m) });
     await request(app).get('/nope');
     expect(level(lines, 50)).toBeUndefined();
     expect(level(lines, 30)).toBeDefined();
@@ -142,14 +133,14 @@ describe('error middleware', () => {
     ['empty body', 'application/json', '', 400],
     ['unsupported media type', 'text/xml', '<a/>', 415],
   ])('a body problem on a route with a body: %s', async (_name, type, payload, status) => {
-    const app = build([route('/j', (_req, res) => void res.json({}), { method: 'post', request: { body: z.unknown() } })]);
+    const app = build((router) => router.post('/j', parseJsonBody(), (_req, res) => void res.json({})));
     const res = await request(app).post('/api/j').set('Content-Type', type).send(payload);
     expect(res.status).toBe(status);
     expect(res.body).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
   });
 
   it('a body problem on an unknown route is still reported, except the media type (404)', async () => {
-    const app = build([]);
+    const app = build(() => undefined);
     expect((await request(app).post('/api/x').set('Content-Type', 'application/json').send('{bad')).status).toBe(400);
     expect((await request(app).post('/api/x').set('Content-Type', 'application/json').send('')).status).toBe(400);
     expect((await request(app).post('/api/x').set('Content-Type', 'text/xml').send('<a/>')).status).toBe(404);

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createRuntime } from '@/composition/create-runtime.js';
+import { app } from '@/app.js';
 import { prisma } from '@/shared/db/prisma.js';
 import { buildContractWorld } from '@tests/support/contract/contract-world.js';
 import {
@@ -45,7 +45,6 @@ function toReply(status: number, headers: Record<string, unknown>, text: string)
   };
 }
 
-const app = createRuntime().app;
 
 beforeAll(async () => {
   await prisma.$connect();

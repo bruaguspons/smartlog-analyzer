@@ -1,7 +1,7 @@
 import request from 'supertest';
 import type { Express } from 'express';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRuntime } from '@/composition/create-runtime.js';
+import { app } from '@/app.js';
 import type { Log } from '@/models/log.js';
 import { logRepository as logRepo } from '@/repositories/log.repository.js';
 import { prisma } from '@/shared/db/prisma.js';
@@ -19,15 +19,11 @@ vi.mock('node:crypto', async (importOriginal) => ({
 const keyA = { 'x-api-key': 'k-a' };
 const INTERNAL = { error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } };
 
-function build(): Express {
-  return createRuntime().app;
-}
-
-/** Replaces the stored logs with the given ones and returns a fresh app. */
+/** Replaces the stored logs with the given ones and returns the app. */
 async function seeded(logs: Log[]): Promise<Express> {
   await prisma.log.deleteMany();
   await insertLogs(logs);
-  return build();
+  return app;
 }
 
 beforeAll(async () => {
@@ -59,7 +55,7 @@ describe('POST /api/logs against Postgres', () => {
   it('201 with exactly the seven camelCase keys and the generated id', async () => {
     const body = { ...valid, traceId: 't-1', metadata: { a: 1 } };
 
-    const res = await post(build(), body);
+    const res = await post(app, body);
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ id: ID, serviceId: 1, ...body });
@@ -67,36 +63,35 @@ describe('POST /api/logs against Postgres', () => {
   });
 
   it('takes the service from the key', async () => {
-    const res = await post(build(), valid, { 'x-api-key': 'k-b' });
+    const res = await post(app, valid, { 'x-api-key': 'k-b' });
     expect((res.body as { serviceId: number }).serviceId).toBe(2);
   });
 
   it('absent optionals are null', async () => {
-    const res = await post(build(), valid);
+    const res = await post(app, valid);
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ traceId: null, metadata: null });
   });
 
   it('normalizes an offset timestamp to UTC', async () => {
-    const res = await post(build(), { ...valid, timestamp: '2026-11-03T08:00:00-03:00' });
+    const res = await post(app, { ...valid, timestamp: '2026-11-03T08:00:00-03:00' });
     expect((res.body as { timestamp: string }).timestamp).toBe('2026-11-03T11:00:00.000Z');
   });
 
   it('a body serviceId is rejected and nothing is persisted', async () => {
-    const res = await post(build(), { ...valid, serviceId: 9 });
+    const res = await post(app, { ...valid, serviceId: 9 });
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
     expect(await prisma.log.count()).toBe(0);
   });
 
   it('a missing key with an invalid body is 401, not 400', async () => {
-    const res = await post(build(), { nope: true }, {});
+    const res = await post(app, { nope: true }, {});
     expect(res.status).toBe(401);
     expect(await prisma.log.count()).toBe(0);
   });
 
   it('inactive and unknown keys give an identical 401', async () => {
-    const app = build();
     const inactive = await post(app, valid, { 'x-api-key': 'k-off' });
     const unknown = await post(app, valid, { 'x-api-key': 'nope' });
     expect(inactive.status).toBe(401);
@@ -104,26 +99,26 @@ describe('POST /api/logs against Postgres', () => {
   });
 
   it('future skew gives 400 with /timestamp in details', async () => {
-    const res = await post(build(), { ...valid, timestamp: new Date(NOW.getTime() + 300_001).toISOString() });
+    const res = await post(app, { ...valid, timestamp: new Date(NOW.getTime() + 300_001).toISOString() });
     expect(res.status).toBe(400);
     expect((res.body as { error: { details: unknown[] } }).error.details).toEqual([expect.objectContaining({ instancePath: '/timestamp' })]);
   });
 
   it('two invalid fields give two details and persist nothing', async () => {
-    const res = await post(build(), { ...valid, level: 'x', message: '' });
+    const res = await post(app, { ...valid, level: 'x', message: '' });
     expect(res.status).toBe(400);
     expect((res.body as { error: { details: unknown[] } }).error.details).toHaveLength(2);
     expect(await prisma.log.count()).toBe(0);
   });
 
   it('malformed JSON is a 400 VALIDATION_ERROR', async () => {
-    const res = await request(build()).post('/api/logs').set(keyA).set('Content-Type', 'application/json').send('{"level":');
+    const res = await request(app).post('/api/logs').set(keyA).set('Content-Type', 'application/json').send('{"level":');
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
   });
 
   it('a body over 1 MiB is a 413 PAYLOAD_TOO_LARGE', async () => {
-    const res = await post(build(), { ...valid, message: 'a'.repeat(1_048_577) });
+    const res = await post(app, { ...valid, message: 'a'.repeat(1_048_577) });
     expect(res.status).toBe(413);
     expect(res.body).toMatchObject({ error: { code: 'PAYLOAD_TOO_LARGE' } });
   });
@@ -131,7 +126,7 @@ describe('POST /api/logs against Postgres', () => {
   it('500 on repository failure without leaking internals', async () => {
     vi.spyOn(logRepo, 'create').mockRejectedValue(new Error('secret db detail'));
 
-    const res = await post(build(), valid);
+    const res = await post(app, valid);
 
     expect(res.status).toBe(500);
     expect(res.body).toEqual(INTERNAL);
@@ -158,7 +153,7 @@ describe('GET /api/logs against Postgres', () => {
   });
 
   it('empty result', async () => {
-    const res = await get(build(), '/api/logs');
+    const res = await get(app, '/api/logs');
     expect(res.body).toEqual({ items: [], nextCursor: null, hasMore: false });
   });
 
@@ -207,7 +202,6 @@ describe('GET /api/logs against Postgres', () => {
   });
 
   it('missing, unknown and inactive keys give the same 401, before validation', async () => {
-    const app = build();
     const missing = await get(app, '/api/logs?limit=0', {});
     const unknown = await get(app, '/api/logs', { 'x-api-key': 'nope' });
     const inactive = await get(app, '/api/logs', { 'x-api-key': 'k-off' });
@@ -229,7 +223,7 @@ describe('GET /api/logs against Postgres', () => {
     'search=',
     'traceId=',
   ])('%s is a 400 VALIDATION_ERROR with a details list', async (query) => {
-    const res = await get(build(), `/api/logs?${query}`);
+    const res = await get(app, `/api/logs?${query}`);
     expect(res.status).toBe(400);
     const { error } = res.body as { error: { code: string; details: unknown[] } };
     expect(error.code).toBe('VALIDATION_ERROR');
@@ -239,7 +233,7 @@ describe('GET /api/logs against Postgres', () => {
   it('500 on repository failure without leaking internals', async () => {
     vi.spyOn(logRepo, 'list').mockRejectedValue(new Error('secret db detail'));
 
-    const res = await get(build(), '/api/logs');
+    const res = await get(app, '/api/logs');
     expect(res.status).toBe(500);
     expect(res.body).toEqual(INTERNAL);
   });
@@ -274,7 +268,7 @@ describe('GET /api/logs/stats against Postgres', () => {
   });
 
   it('empty result is 200 { total: 0, groups: [] }', async () => {
-    expect((await get(build(), '/api/logs/stats')).body).toEqual({ total: 0, groups: [] });
+    expect((await get(app, '/api/logs/stats')).body).toEqual({ total: 0, groups: [] });
   });
 
   it.each([
@@ -307,7 +301,7 @@ describe('GET /api/logs/stats against Postgres', () => {
     'serviceId=0',
     'from=2026-01-02T00:00:00Z&to=2026-01-01T00:00:00Z',
   ])('%s is a 400 VALIDATION_ERROR with a details list', async (query) => {
-    const res = await get(build(), `/api/logs/stats?${query}`);
+    const res = await get(app, `/api/logs/stats?${query}`);
     expect(res.status).toBe(400);
     const { error } = res.body as { error: { code: string; details: unknown[] } };
     expect(error.code).toBe('VALIDATION_ERROR');
@@ -315,14 +309,14 @@ describe('GET /api/logs/stats against Postgres', () => {
   });
 
   it('from equal to to is accepted', async () => {
-    const res = await get(build(), '/api/logs/stats?from=2026-01-01T00:00:00Z&to=2026-01-01T00:00:00Z');
+    const res = await get(app, '/api/logs/stats?from=2026-01-01T00:00:00Z&to=2026-01-01T00:00:00Z');
     expect(res.status).toBe(200);
   });
 
   it('500 on repository failure without leaking internals', async () => {
     vi.spyOn(logRepo, 'countByServiceAndLevel').mockRejectedValue(new Error('secret db detail'));
 
-    const res = await get(build(), '/api/logs/stats');
+    const res = await get(app, '/api/logs/stats');
     expect(res.status).toBe(500);
     expect(res.body).toEqual(INTERNAL);
   });
@@ -330,7 +324,7 @@ describe('GET /api/logs/stats against Postgres', () => {
   it('500 without leaking internals when a group references a service missing from the service repository', async () => {
     vi.spyOn(logRepo, 'countByServiceAndLevel').mockResolvedValue([{ serviceId: 99, level: 'ERROR', count: 1 }]);
 
-    const res = await get(build(), '/api/logs/stats');
+    const res = await get(app, '/api/logs/stats');
     expect(res.status).toBe(500);
     expect(res.body).toEqual(INTERNAL);
     expect(res.text).not.toContain('service 99');

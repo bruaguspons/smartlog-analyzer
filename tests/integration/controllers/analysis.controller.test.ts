@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRuntime } from '@/composition/create-runtime.js';
+import { app } from '@/app.js';
 import { analysisRunner } from '@/services/analysis-runner.js';
 import { prisma } from '@/shared/db/prisma.js';
 import { hangUntilAborted, okJson, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
@@ -32,7 +32,6 @@ interface AnalysisBody {
 }
 
 const llm = scriptedLlm();
-const { app } = createRuntime();
 
 /** Stores `logCount` logs and scripts the model with `script`. */
 async function build(logCount: number, ...script: ScriptStep[]): Promise<void> {
