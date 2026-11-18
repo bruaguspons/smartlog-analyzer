@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import request from "supertest";
 import {
   afterAll,
   afterEach,
@@ -9,7 +9,7 @@ import {
   inject,
   it,
 } from "vitest";
-import type { Runtime } from '@/composition/runtime.types.js';
+import type { Runtime } from '@/composition/create-runtime.js';
 import { LlmError } from '@/llm/llm-client.js';
 import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
@@ -49,7 +49,7 @@ interface AnalysisBody {
   findings: { category: string; severity: string; logIds: string[] }[];
 }
 
-let app: FastifyInstance;
+let runtime: Runtime;
 let runner: Runtime["runner"];
 let llm: ScriptedLlmClient;
 let closed = false;
@@ -63,24 +63,25 @@ function build(
   ...script: ScriptStep[]
 ): void {
   llm = new ScriptedLlmClient(...script);
-  ({ app, runner } = buildIntegrationRuntime({
+  runtime = buildIntegrationRuntime({
     prisma,
     llm,
     timeoutMs: TIMEOUT_MS,
     ...options,
-  }));
+  });
+  ({ runner } = runtime);
   closed = false;
 }
 
 const analyze = (payload: object = {}) =>
-  app.inject({ method: "POST", url: "/api/logs/analyze", headers, payload });
+  request(runtime.app).post("/api/logs/analyze").set(headers).send(payload);
 
 /** Starts an analysis, expects 202, waits for its terminal write and returns the started body. */
 async function run(payload: object = {}): Promise<Started> {
   const res = await analyze(payload);
-  expect(res.statusCode).toBe(202);
+  expect(res.status).toBe(202);
   await runner.idle();
-  return res.json<Started>();
+  return res.body as Started;
 }
 
 const dbRow = (id: string) =>
@@ -104,13 +105,9 @@ const analysisLogIds = async (id: string) =>
   ).map((l) => l.logId);
 
 async function view(id: string): Promise<AnalysisBody> {
-  const res = await app.inject({
-    method: "GET",
-    url: `/api/analysis/${id}`,
-    headers,
-  });
-  expect(res.statusCode).toBe(200);
-  return res.json<AnalysisBody>();
+  const res = await request(runtime.app).get(`/api/analysis/${id}`).set(headers);
+  expect(res.status).toBe(200);
+  return res.body as AnalysisBody;
 }
 
 /** Logs 1..count for service 1, log n at BASE + n seconds. */
@@ -147,8 +144,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   if (closed) return;
-  await runner.shutdown();
-  await app.close();
+  await runtime.close();
 });
 
 describe("LLM outcomes persisted in Postgres", () => {
@@ -298,16 +294,10 @@ describe("LLM outcomes persisted in Postgres", () => {
   it("an unknown analysis id is a 404 envelope", async () => {
     build({}, okJson({ summary: "s", findings: [] }));
 
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/analysis/${analysisId(404)}`,
-      headers,
-    });
+    const res = await request(runtime.app).get(`/api/analysis/${analysisId(404)}`).set(headers);
 
-    expect(res.statusCode).toBe(404);
-    expect(res.json<{ error: { code: string } }>().error.code).toBe(
-      "NOT_FOUND",
-    );
+    expect(res.status).toBe(404);
+    expect((res.body as { error: { code: string } }).error.code).toBe("NOT_FOUND");
   });
 });
 
@@ -392,13 +382,13 @@ describe("shutdown", () => {
       hangUntilAborted,
     );
     const res = await analyze();
-    expect(res.statusCode).toBe(202);
-    const { id } = res.json<Started>();
+    expect(res.status).toBe(202);
+    const { id } = res.body as Started;
     idAtDisconnect = id;
     await waitUntil(() => llm.calls === 1);
     expect((await dbRow(id)).status).toBe("PROCESSING");
 
-    await app.close();
+    await runtime.close();
     closed = true;
 
     expect(await dbRow(id)).toMatchObject({
@@ -435,16 +425,12 @@ describe("cursor continuation through analyze", () => {
     const listed: string[] = [];
     let cursor = "";
     for (;;) {
-      const res = await app.inject({
-        method: "GET",
-        url: `/api/logs?limit=2${cursor}`,
-        headers,
-      });
-      const page = res.json<{
+      const res = await request(runtime.app).get(`/api/logs?limit=2${cursor}`).set(headers);
+      const page = res.body as {
         items: { id: string }[];
         hasMore: boolean;
         nextCursor: string | null;
-      }>();
+      };
       listed.push(...page.items.map((i) => i.id));
       if (!page.hasMore) break;
       cursor = `&cursor=${page.nextCursor ?? ""}`;
@@ -519,14 +505,9 @@ describe("filters through analyze match GET /api/logs", () => {
 
     const { id } = await run(payload);
 
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/logs?limit=200&${query}`,
-      headers,
-    });
-    const expected = res
-      .json<{ items: { id: string }[] }>()
-      .items.map((i) => i.id)
+    const res = await request(runtime.app).get(`/api/logs?limit=200&${query}`).set(headers);
+    const expected = (res.body as { items: { id: string }[] }).items
+      .map((i) => i.id)
       .sort();
     expect(expected.length).toBeGreaterThan(0);
     expect(expected.length).toBeLessThan(6);

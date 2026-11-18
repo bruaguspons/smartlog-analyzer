@@ -1,8 +1,6 @@
-import type { FastifyInstance } from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
-import { main } from '@/composition/main.js';
-import type { ProcessIo } from '@/composition/process-io.types.js';
-import type { RuntimeDeps } from '@/composition/runtime.types.js';
+import { main, type ProcessIo } from '@/composition/main.js';
+import type { Runtime, RuntimeDeps } from '@/composition/create-runtime.js';
 import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
 import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import type { Service } from '@/models/service.js';
@@ -53,9 +51,9 @@ describe('main', () => {
     const io = makeIo();
     const { analysisRepo, deps } = fixture();
     vi.spyOn(analysisRepo, 'failAllProcessing').mockRejectedValue(new Error('db down'));
-    let created: FastifyInstance | undefined;
-    io.registerShutdown.mockImplementation((a: FastifyInstance) => {
-      created = a;
+    let created: Runtime | undefined;
+    io.registerShutdown.mockImplementation((runtime: Runtime) => {
+      created = runtime;
     });
 
     await main({ ...baseEnv, PORT: '3999' }, io, () => deps);

@@ -1,4 +1,4 @@
-import type { Runtime } from '@/composition/runtime.types.js';
+import type { Runtime } from '@/composition/create-runtime.js';
 import { createRuntime } from '@/composition/create-runtime.js';
 import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
 import type { LlmClient } from '@/llm/llm-client.js';

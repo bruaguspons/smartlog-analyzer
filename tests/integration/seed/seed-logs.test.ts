@@ -1,4 +1,5 @@
 import { randomUUIDv7 } from 'node:crypto';
+import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import { SAMPLE_LOG_COUNT } from '@/seed/sample-logs.const.js';
 import { seedLogs } from '@/seed/seed-logs.js';
@@ -9,6 +10,9 @@ import { buildIntegrationRuntime } from '@tests/support/integration/integration-
 
 const prisma = createPrismaClient(inject('databaseUrl'));
 const deps = { newId: randomUUIDv7 };
+interface Page {
+  items: { serviceId: number }[];
+}
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 beforeAll(async () => {
@@ -63,16 +67,12 @@ describe('seedLogs', () => {
 
   it('the seeded logs are served by GET /api/logs with a seeded key, and serviceId narrows them to one service', async () => {
     await seedLogs(prisma, deps);
-    const { app } = buildIntegrationRuntime({ prisma, llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })) });
+    const runtime = buildIntegrationRuntime({ prisma, llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })) });
     const headers = { 'x-api-key': DEV_SERVICES[0].apiKey };
     try {
-      const all = (await app.inject({ method: 'GET', url: '/api/logs?limit=200', headers })).json<{
-        items: { serviceId: number }[];
-      }>();
+      const all = (await request(runtime.app).get('/api/logs?limit=200').set(headers)).body as Page;
       const payments = await prisma.service.findUniqueOrThrow({ where: { apiKey: DEV_SERVICES[0].apiKey } });
-      const own = (await app.inject({ method: 'GET', url: `/api/logs?limit=200&serviceId=${String(payments.id)}`, headers })).json<{
-        items: { serviceId: number }[];
-      }>();
+      const own = (await request(runtime.app).get(`/api/logs?limit=200&serviceId=${String(payments.id)}`).set(headers)).body as Page;
 
       expect(all.items).toHaveLength(SAMPLE_LOG_COUNT);
       expect(new Set(all.items.map((i) => i.serviceId)).size).toBeGreaterThan(1);
@@ -80,7 +80,7 @@ describe('seedLogs', () => {
       expect(own.items.length).toBeLessThan(SAMPLE_LOG_COUNT);
       expect(own.items.every((i) => i.serviceId === payments.id)).toBe(true);
     } finally {
-      await app.close();
+      await runtime.close();
     }
   });
 });

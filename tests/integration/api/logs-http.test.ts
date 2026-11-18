@@ -1,5 +1,6 @@
-import type { FastifyInstance } from 'fastify';
+import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import type { Runtime } from '@/composition/create-runtime.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { logId } from '@tests/support/contracts/analysis-repository-contract.js';
 import { ScriptedLlmClient, okJson } from '@tests/support/fakes/scripted-llm-client.js';
@@ -28,14 +29,14 @@ interface ErrorBody {
   error: { code: string };
 }
 
-let app: FastifyInstance;
+let runtime: Runtime;
 
 const get = (url: string, headers: Record<string, string> = authHeaders) =>
-  app.inject({ method: 'GET', url, headers });
+  request(runtime.app).get(url).set(headers);
 const getPage = async (url: string) => {
   const res = await get(url);
-  expect(res.statusCode).toBe(200);
-  return res.json<Page>();
+  expect(res.status).toBe(200);
+  return res.body as Page;
 };
 
 /** Inserts `count` logs for service 1 with sequential ids; `stamp(n)` gives the timestamp offset in seconds. */
@@ -61,25 +62,25 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetDatabase(prisma);
-  ({ app } = buildIntegrationRuntime({ prisma, llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })) }));
+  runtime = buildIntegrationRuntime({ prisma, llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })) });
 });
 
 afterEach(async () => {
-  await app.close();
+  await runtime.close();
 });
 
 describe('POST /api/logs against Postgres', () => {
   const valid = { level: 'ERROR', timestamp: '2026-11-04T08:00:00.000Z', message: 'boom' };
   const post = (payload: object, headers: Record<string, string> = authHeaders) =>
-    app.inject({ method: 'POST', url: '/api/logs', headers, payload });
+    request(runtime.app).post('/api/logs').set(headers).send(payload);
 
   it('201 returns the stored log, with a UUIDv7 id and the service taken from the key', async () => {
     await prisma.service.create({ data: { name: 'other', apiKey: 'key-2' } });
 
     const res = await post({ ...valid, traceId: 't-1', metadata: { a: 1 } }, { 'x-api-key': 'key-2' });
 
-    expect(res.statusCode).toBe(201);
-    const created = res.json<Item & { traceId: string; metadata: object; message: string }>();
+    expect(res.status).toBe(201);
+    const created = res.body as Item & { traceId: string; metadata: object; message: string };
     expect(created.id).toMatch(UUID_V7);
     expect(created).toMatchObject({ serviceId: 2, level: 'ERROR', message: 'boom', traceId: 't-1', metadata: { a: 1 } });
     expect(await prisma.log.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({
@@ -92,8 +93,8 @@ describe('POST /api/logs against Postgres', () => {
   it('a serviceId in the body is a 400 and nothing is stored', async () => {
     const res = await post({ ...valid, serviceId: 1 });
 
-    expect(res.statusCode).toBe(400);
-    expect(res.json<ErrorBody>().error.code).toBe('VALIDATION_ERROR');
+    expect(res.status).toBe(400);
+    expect((res.body as ErrorBody).error.code).toBe('VALIDATION_ERROR');
     expect(await prisma.log.count()).toBe(0);
   });
 
@@ -101,9 +102,9 @@ describe('POST /api/logs against Postgres', () => {
     const missing = await post(valid, {});
     const unknown = await post(valid, { 'x-api-key': 'nope' });
 
-    expect(missing.statusCode).toBe(401);
-    expect(unknown.statusCode).toBe(401);
-    expect(unknown.json()).toEqual(missing.json());
+    expect(missing.status).toBe(401);
+    expect(unknown.status).toBe(401);
+    expect(unknown.body).toEqual(missing.body);
     expect(await prisma.log.count()).toBe(0);
   });
 
@@ -113,8 +114,8 @@ describe('POST /api/logs against Postgres', () => {
     const inactive = await post(valid, { 'x-api-key': 'key-off' });
     const missing = await post(valid, {});
 
-    expect(inactive.statusCode).toBe(401);
-    expect(inactive.json()).toEqual(missing.json());
+    expect(inactive.status).toBe(401);
+    expect(inactive.body).toEqual(missing.body);
   });
 });
 
@@ -147,11 +148,11 @@ describe('GET /api/logs against Postgres', () => {
   it('limit 200 is accepted; 201 and 0 are a 400 envelope', async () => {
     await seedLogs(1);
 
-    expect((await get('/api/logs?limit=200')).statusCode).toBe(200);
+    expect((await get('/api/logs?limit=200')).status).toBe(200);
     for (const limit of ['201', '0']) {
       const res = await get(`/api/logs?limit=${limit}`);
-      expect(res.statusCode).toBe(400);
-      expect(res.json<ErrorBody>().error.code).toBe('VALIDATION_ERROR');
+      expect(res.status).toBe(400);
+      expect((res.body as ErrorBody).error.code).toBe('VALIDATION_ERROR');
     }
   });
 
@@ -193,8 +194,8 @@ describe('GET /api/logs/stats against Postgres', () => {
 
   const stats = async (query = '') => {
     const res = await get(`/api/logs/stats${query}`);
-    expect(res.statusCode).toBe(200);
-    return res.json<Stats>();
+    expect(res.status).toBe(200);
+    return res.body as Stats;
   };
   const summary = (body: Stats) =>
     body.groups
@@ -226,15 +227,15 @@ describe('GET /api/logs/stats against Postgres', () => {
   it('a repeated serviceId is rejected (the filter is single-valued), never double counted', async () => {
     const res = await get('/api/logs/stats?serviceId=1&serviceId=1');
 
-    expect(res.statusCode).toBe(400);
-    expect(res.json<ErrorBody>().error.code).toBe('VALIDATION_ERROR');
+    expect(res.status).toBe(400);
+    expect((res.body as ErrorBody).error.code).toBe('VALIDATION_ERROR');
   });
 
   it('limit and cursor are rejected because stats is not paginated', async () => {
     for (const query of ['?limit=10', '?cursor=abc']) {
       const res = await get(`/api/logs/stats${query}`);
-      expect(res.statusCode).toBe(400);
-      expect(res.json<ErrorBody>().error.code).toBe('VALIDATION_ERROR');
+      expect(res.status).toBe(400);
+      expect((res.body as ErrorBody).error.code).toBe('VALIDATION_ERROR');
     }
   });
 });

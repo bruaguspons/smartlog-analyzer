@@ -4,7 +4,7 @@ import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
 import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
 import type { Config } from '@/shared/config/load-config.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
-import type { RuntimeDeps } from './runtime.types.js';
+import type { RuntimeDeps } from './create-runtime.js';
 
 /** Production dependencies: Prisma repositories and the configured LLM client. */
 export function createPrismaDeps(config: Config): RuntimeDeps {

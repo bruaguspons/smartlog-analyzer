@@ -1,6 +1,6 @@
-import type { FastifyInstance } from 'fastify';
+import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
-import type { Runtime } from '@/composition/runtime.types.js';
+import type { Runtime } from '@/composition/create-runtime.js';
 import { recoverInterrupted } from '@/services/analysis-runner.js';
 import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
 import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
@@ -18,20 +18,20 @@ interface Body {
   error?: { code: string; details?: { id: string } };
 }
 
-let app: FastifyInstance;
+let runtime: Runtime;
 let runner: Runtime['runner'];
 
 function build(wrapAnalysisRepo: ((repo: AnalysisRepository) => AnalysisRepository) | undefined, ...script: ScriptStep[]): void {
-  const runtime = buildIntegrationRuntime({
+  runtime = buildIntegrationRuntime({
     prisma,
     llm: new ScriptedLlmClient(...script),
     ...(wrapAnalysisRepo && { wrapAnalysisRepo }),
   });
-  ({ app, runner } = runtime);
+  ({ runner } = runtime);
 }
 
-const post = () => app.inject({ method: 'POST', url: '/api/logs/analyze', headers, payload: {} });
-const body = (res: { json: () => unknown }) => res.json() as Body;
+const post = () => request(runtime.app).post('/api/logs/analyze').set(headers).send({});
+const body = (res: { body: unknown }) => res.body as Body;
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -56,7 +56,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await runner.shutdown();
-  await app.close();
+  await runtime.close();
 });
 
 describe('analysis flow against Postgres', () => {
@@ -65,10 +65,10 @@ describe('analysis flow against Postgres', () => {
 
     const results = await Promise.all([post(), post()]);
 
-    const statuses = results.map((r) => r.statusCode).sort();
+    const statuses = results.map((r) => r.status).sort();
     expect(statuses).toEqual([202, 409]);
-    const accepted = results.find((r) => r.statusCode === 202);
-    const rejected = results.find((r) => r.statusCode === 409);
+    const accepted = results.find((r) => r.status === 202);
+    const rejected = results.find((r) => r.status === 409);
     if (!accepted || !rejected) throw new Error('expected one 202 and one 409');
     const winner = body(accepted);
     const loser = body(rejected);
@@ -79,13 +79,13 @@ describe('analysis flow against Postgres', () => {
 
   it('a new analysis is accepted after the previous one reached a terminal state', async () => {
     build(undefined, okJson({ summary: 'Summary', findings: [] }));
-    expect((await post()).statusCode).toBe(202);
+    expect((await post()).status).toBe(202);
     await runner.idle();
     expect(await prisma.analysis.count({ where: { status: 'COMPLETED' } })).toBe(1);
 
     const second = await post();
 
-    expect(second.statusCode).toBe(202);
+    expect(second.status).toBe(202);
   });
 
   it('startup recovery closes leftover PROCESSING rows and unblocks POST', async () => {
@@ -94,7 +94,7 @@ describe('analysis flow against Postgres', () => {
       { id: analysisId(1), provider: 'mock', model: 'mock', createdAt: new Date() },
       [logId(1)],
     );
-    expect((await post()).statusCode).toBe(409);
+    expect((await post()).status).toBe(409);
 
     await recoverInterrupted(analysisRepo, silent);
 
@@ -102,7 +102,7 @@ describe('analysis flow against Postgres', () => {
       status: 'FAILED',
       errorCode: 'INTERRUPTED',
     });
-    expect((await post()).statusCode).toBe(202);
+    expect((await post()).status).toBe(202);
   });
 
   it('when saving the COMPLETED result fails nothing partial is stored and the analysis ends FAILED', async () => {

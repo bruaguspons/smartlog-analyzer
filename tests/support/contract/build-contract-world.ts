@@ -1,5 +1,5 @@
 import { createRuntime } from '@/composition/create-runtime.js';
-import type { RuntimeDeps } from '@/composition/runtime.types.js';
+import type { RuntimeDeps } from '@/composition/create-runtime.js';
 import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
 import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';

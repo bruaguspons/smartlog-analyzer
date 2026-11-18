@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { afterEach } from 'vitest';
 import type { Express } from 'express';
-import { buildExpressApp } from '@tests/support/apps/build-express-app.js';
+import { createRuntime, type Runtime } from '@/composition/create-runtime.js';
 import { loadConfig } from '@/shared/config/load-config.js';
 import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
 import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
@@ -31,10 +31,11 @@ export interface AnalysisBody {
 }
 
 /**
- * Builds the analysis endpoints over in-memory fakes and shuts the runner down after each test.
+ * Builds the analysis endpoints over in-memory fakes and closes the runtime after each test.
  * Call it inside a `describe`; read `app`, `runner`, `analysisRepo` and `llm` after `build`.
  */
 export function useAnalysisApp() {
+  let runtime: Runtime;
   let app: Express;
   let runner: AnalysisRunner;
   let analysisRepo: InMemoryAnalysisRepository;
@@ -46,8 +47,8 @@ export function useAnalysisApp() {
     analysisRepo = new InMemoryAnalysisRepository();
     llm = new ScriptedLlmClient(...(script.length > 0 ? script : [okJson({ summary: 'Summary', findings: [] })]));
     let counter = 0;
-    ({ app, runner } = buildExpressApp(
-      loadConfig({ DATABASE_URL: 'postgresql://unused:unused@localhost:5432/unused', LLM_MAX_RETRIES: '0' }),
+    runtime = createRuntime(
+      loadConfig({ DATABASE_URL: 'postgresql://unused:unused@localhost:5432/unused', LOG_LEVEL: 'silent', LLM_MAX_RETRIES: '0' }),
       {
         serviceRepo: new InMemoryServiceRepository([active, off]),
         logRepo,
@@ -58,11 +59,12 @@ export function useAnalysisApp() {
         newId: () => analysisId((counter += 1)),
         now: () => NOW,
       },
-    ));
+    );
+    ({ app, runner } = runtime);
   }
 
   afterEach(async () => {
-    await runner.shutdown();
+    await runtime.close();
   });
 
   const post = (payload: object = {}, h: Record<string, string> = headers) =>
