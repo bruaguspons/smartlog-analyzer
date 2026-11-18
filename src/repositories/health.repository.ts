@@ -6,5 +6,3 @@ export const healthRepository = {
     await prisma.$queryRaw`SELECT 1`;
   },
 };
-
-export type HealthRepository = typeof healthRepository;
