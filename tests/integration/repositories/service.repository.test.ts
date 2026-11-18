@@ -1,12 +1,9 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Service } from '@/models/service.js';
-import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
+import { serviceRepository as repository } from '@/repositories/service.repository.js';
 import { DEV_SERVICES, seedServices } from '@/seed/seed-services.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { makeService } from '@tests/support/fixtures.js';
-
-const prisma = createPrismaClient(inject('databaseUrl'));
-const repository = new PrismaServiceRepository(prisma);
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -84,7 +81,7 @@ describe('ServiceRepository', () => {
   });
 });
 
-describe('PrismaServiceRepository', () => {
+describe('serviceRepository', () => {
   it('enforces a unique api_key', async () => {
     await prisma.service.create({ data: { name: 'a', apiKey: 'dup' } });
 

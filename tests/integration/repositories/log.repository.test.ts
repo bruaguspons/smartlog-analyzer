@@ -1,12 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Log, LogFilters } from '@/models/log.js';
-import type { LogCountGroup, LogRepository } from '@/repositories/log.repository.js';
-import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { logRepository as repository, type LogCountGroup, type LogRepository } from '@/repositories/log.repository.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { makeLog } from '@tests/support/fixtures.js';
-
-const prisma = createPrismaClient(inject('databaseUrl'));
-const repository = new PrismaLogRepository(prisma);
 
 const ID = '0192f1c0-0000-7000-8000-000000000001';
 
@@ -62,7 +58,7 @@ beforeEach(async () => {
   await prisma.service.create({ data: { name: 'svc', apiKey: 'key-1' } });
 });
 
-describe('PrismaLogRepository', () => {
+describe('logRepository', () => {
   it('round-trips every field, keeping milliseconds and nested metadata', async () => {
     const log = makeStoredLog();
 

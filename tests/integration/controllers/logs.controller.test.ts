@@ -1,55 +1,48 @@
 import request from 'supertest';
 import type { Express } from 'express';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
-import type { Runtime } from '@/composition/create-runtime.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRuntime } from '@/composition/create-runtime.js';
 import type { Log } from '@/models/log.js';
-import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
-import { okJson, ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';
+import { logRepository as logRepo } from '@/repositories/log.repository.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { makeLog, makeService } from '@tests/support/fixtures.js';
 import { insertLogs, resetDatabase } from '@tests/support/integration/database.js';
-import { buildIntegrationRuntime } from '@tests/support/integration/integration-app.js';
-
-const prisma = createPrismaClient(inject('databaseUrl'));
-const logRepo = new PrismaLogRepository(prisma);
 
 const ID = '0192f1c0-0000-7000-8000-000000000001';
 const NOW = new Date('2026-11-03T12:00:00.000Z');
+// A fixed id and clock make the stored and returned rows reproducible.
+vi.mock('node:crypto', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:crypto')>()),
+  randomUUIDv7: () => '0192f1c0-0000-7000-8000-000000000001',
+}));
+
 const keyA = { 'x-api-key': 'k-a' };
 const INTERNAL = { error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } };
 
-const runtimes: Runtime[] = [];
-
 function build(): Express {
-  const runtime = buildIntegrationRuntime({
-    prisma,
-    llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })),
-    logRepo,
-    newId: () => ID,
-    now: () => NOW,
-  });
-  runtimes.push(runtime);
-  return runtime.app;
+  return createRuntime().app;
 }
 
 /** Replaces the stored logs with the given ones and returns a fresh app. */
 async function seeded(logs: Log[]): Promise<Express> {
   await prisma.log.deleteMany();
-  await insertLogs(prisma, logs);
+  await insertLogs(logs);
   return build();
 }
 
 beforeAll(async () => {
   await prisma.$connect();
+  vi.useFakeTimers({ toFake: ['Date'], now: NOW });
 });
 
 afterAll(async () => {
+  vi.useRealTimers();
   await prisma.$disconnect();
 });
 
 beforeEach(async () => {
   vi.restoreAllMocks();
-  await resetDatabase(prisma);
+  await resetDatabase();
   await prisma.service.createMany({
     data: [
       makeService(1, { name: 'a', apiKey: 'k-a' }),
@@ -57,10 +50,6 @@ beforeEach(async () => {
       makeService(3, { name: 'off', apiKey: 'k-off', isActive: false }),
     ],
   });
-});
-
-afterEach(async () => {
-  await Promise.all(runtimes.splice(0).map((runtime) => runtime.close()));
 });
 
 describe('POST /api/logs against Postgres', () => {

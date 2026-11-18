@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import type { Log } from '@/models/log.js';
+import { healthRepository } from '@/repositories/health.repository.js';
 import type { LogRepository } from '@/repositories/log.repository.js';
 import type { AnalysisRunner } from '@/services/analysis-runner.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
@@ -41,7 +42,6 @@ export interface ContractCase {
 }
 
 export interface WorldOptions {
-  checkDatabase?: () => Promise<void>;
   script?: ScriptStep[];
 }
 
@@ -102,7 +102,13 @@ export const CONTRACT_CASES: ContractCase[] = [
   simple('health ok without key', { method: 'GET', url: '/api/health' }),
   simple('health ok with a bad key', { method: 'GET', url: '/api/health', headers: { 'x-api-key': 'nope' } }),
   simple('health HEAD', { method: 'HEAD', url: '/api/health' }),
-  simple('health 503 when the database is down', { method: 'GET', url: '/api/health' }, { checkDatabase: () => Promise.reject(new Error('secret db detail')) }),
+  {
+    name: 'health 503 when the database is down',
+    run: ({ send }) => {
+      vi.spyOn(healthRepository, 'ping').mockRejectedValue(new Error('secret db detail'));
+      return send({ method: 'GET', url: '/api/health' });
+    },
+  },
   simple('ingest 201', post('/api/logs', JSON.stringify(validLog))),
   simple('ingest 201 with the other service key', post('/api/logs', JSON.stringify({ level: 'DEBUG', timestamp: '2026-11-04T08:00:00+02:00', message: 'm' }), { 'x-api-key': OTHER_KEY, ...json })),
   simple('list default', get('/api/logs')),

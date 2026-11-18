@@ -1,14 +1,12 @@
 import { randomUUIDv7 } from 'node:crypto';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createRuntime } from '@/composition/create-runtime.js';
 import { SAMPLE_LOG_COUNT } from '@/seed/sample-logs.const.js';
 import { seedLogs } from '@/seed/seed-logs.js';
 import { DEV_SERVICES, seedServices } from '@/seed/seed-services.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
-import { okJson, ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';
-import { buildIntegrationRuntime } from '@tests/support/integration/integration-app.js';
+import { prisma } from '@/shared/db/prisma.js';
 
-const prisma = createPrismaClient(inject('databaseUrl'));
 const deps = { newId: randomUUIDv7 };
 interface Page {
   items: { serviceId: number }[];
@@ -67,20 +65,16 @@ describe('seedLogs', () => {
 
   it('the seeded logs are served by GET /api/logs with a seeded key, and serviceId narrows them to one service', async () => {
     await seedLogs(prisma, deps);
-    const runtime = buildIntegrationRuntime({ prisma, llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })) });
+    const { app } = createRuntime();
     const headers = { 'x-api-key': DEV_SERVICES[0].apiKey };
-    try {
-      const all = (await request(runtime.app).get('/api/logs?limit=200').set(headers)).body as Page;
-      const payments = await prisma.service.findUniqueOrThrow({ where: { apiKey: DEV_SERVICES[0].apiKey } });
-      const own = (await request(runtime.app).get(`/api/logs?limit=200&serviceId=${String(payments.id)}`).set(headers)).body as Page;
+    const all = (await request(app).get('/api/logs?limit=200').set(headers)).body as Page;
+    const payments = await prisma.service.findUniqueOrThrow({ where: { apiKey: DEV_SERVICES[0].apiKey } });
+    const own = (await request(app).get(`/api/logs?limit=200&serviceId=${String(payments.id)}`).set(headers)).body as Page;
 
-      expect(all.items).toHaveLength(SAMPLE_LOG_COUNT);
-      expect(new Set(all.items.map((i) => i.serviceId)).size).toBeGreaterThan(1);
-      expect(own.items.length).toBeGreaterThan(0);
-      expect(own.items.length).toBeLessThan(SAMPLE_LOG_COUNT);
-      expect(own.items.every((i) => i.serviceId === payments.id)).toBe(true);
-    } finally {
-      await runtime.close();
-    }
+    expect(all.items).toHaveLength(SAMPLE_LOG_COUNT);
+    expect(new Set(all.items.map((i) => i.serviceId)).size).toBeGreaterThan(1);
+    expect(own.items.length).toBeGreaterThan(0);
+    expect(own.items.length).toBeLessThan(SAMPLE_LOG_COUNT);
+    expect(own.items.every((i) => i.serviceId === payments.id)).toBe(true);
   });
 });

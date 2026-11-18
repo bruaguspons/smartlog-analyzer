@@ -1,12 +1,9 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { NewFinding } from '@/models/analysis.js';
-import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { analysisRepository as repository } from '@/repositories/analysis.repository.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { analysisId, logId, makeLog } from '@tests/support/fixtures.js';
 import { insertLogs, resetDatabaseWithService } from '@tests/support/integration/database.js';
-
-const prisma = createPrismaClient(inject('databaseUrl'));
-const repository = new PrismaAnalysisRepository(prisma);
 
 const CREATED_AT = new Date('2026-11-04T10:00:00.000Z');
 
@@ -49,9 +46,9 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('PrismaAnalysisRepository', () => {
+describe('analysisRepository', () => {
   it('rolls the analysis back when one of its logs does not exist (atomic create)', async () => {
-    await resetDatabaseWithService(prisma);
+    await resetDatabaseWithService();
 
     await expect(
       repository.createProcessing({ id: analysisId(1), provider: 'mock', model: 'mock', createdAt: new Date() }, [logId(1)]),
@@ -65,10 +62,8 @@ describe('AnalysisRepository', () => {
   const repo = repository;
 
   beforeEach(async () => {
-    await resetDatabaseWithService(prisma);
-    await insertLogs(
-      prisma,
-      [1, 2, 3].map((n) => makeLog(n)),
+    await resetDatabaseWithService();
+    await insertLogs([1, 2, 3].map((n) => makeLog(n)),
     );
   });
 

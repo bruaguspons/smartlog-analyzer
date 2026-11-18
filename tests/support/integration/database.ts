@@ -1,25 +1,24 @@
 import type { Log } from '@/models/log.js';
-import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
-import type { PrismaClient } from '@/shared/db/generated/client.js';
+import { logRepository } from '@/repositories/log.repository.js';
+import { prisma } from '@/shared/db/prisma.js';
 
 /** The API key of the single service `resetDatabaseWithService` creates. */
 export const API_KEY = 'key-1';
 
 /** Empties every table and restarts the id sequences, so each test starts from a blank database. */
-export async function resetDatabase(prisma: PrismaClient): Promise<void> {
+export async function resetDatabase(): Promise<void> {
   await prisma.$executeRaw`TRUNCATE finding_logs, analysis_findings, analysis_logs, analyses, logs, services RESTART IDENTITY CASCADE`;
 }
 
 /** Empties every table and recreates the single active service `key-1` (id 1). */
-export async function resetDatabaseWithService(prisma: PrismaClient): Promise<void> {
-  await resetDatabase(prisma);
+export async function resetDatabaseWithService(): Promise<void> {
+  await resetDatabase();
   await prisma.service.create({ data: { name: 'svc', apiKey: API_KEY } });
 }
 
 /** Stores the given logs (their services must exist). */
-export async function insertLogs(prisma: PrismaClient, logs: readonly Log[]): Promise<void> {
-  const repository = new PrismaLogRepository(prisma);
-  for (const log of logs) await repository.create(log);
+export async function insertLogs(logs: readonly Log[]): Promise<void> {
+  for (const log of logs) await logRepository.create(log);
 }
 
 export interface AfterEachTargets {

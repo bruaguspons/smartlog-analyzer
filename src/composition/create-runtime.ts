@@ -1,34 +1,17 @@
-import { randomUUIDv7 } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { Express } from 'express';
-import pino, { type Logger } from 'pino';
+import type { Logger } from 'pino';
 import { createApp } from '@/app/create-app.js';
-import type { DatabaseCheck } from '@/controllers/health.controller.js';
-import type { RetryDeps } from '@/llm/call-with-retry.js';
-import type { LlmClient } from '@/llm/llm-client.js';
-import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
-import type { LogRepository } from '@/repositories/log.repository.js';
-import type { ServiceRepository } from '@/repositories/service.repository.js';
+import { healthRepository } from '@/repositories/health.repository.js';
+import { analysisRepository } from '@/repositories/analysis.repository.js';
+import { serviceRepository } from '@/repositories/service.repository.js';
 import { createApiRoutes } from '@/routes/api.routes.js';
-import { AnalysisRunner, recoverInterrupted } from '@/services/analysis-runner.js';
-import { AnalysisService } from '@/services/analysis.service.js';
-import { LogsService } from '@/services/logs.service.js';
-import type { Config } from '@/shared/config/load-config.js';
-
-/** Everything the runtime needs from the outside world; tests inject Prisma repositories over a test database and a scripted LLM. */
-export interface RuntimeDeps {
-  serviceRepo: ServiceRepository;
-  logRepo: LogRepository;
-  analysisRepo: AnalysisRepository;
-  llm: LlmClient;
-  checkDatabase: DatabaseCheck;
-  /** Releases the database pool; always runs after the analysis runner has shut down. */
-  disconnect: () => Promise<void>;
-  retry?: Partial<RetryDeps>;
-  newId?: () => string;
-  now?: () => Date;
-  logStream?: { write(msg: string): void };
-}
+import { analysisRunner, recoverInterrupted, type AnalysisRunner } from '@/services/analysis-runner.js';
+import { analysisService } from '@/services/analysis.service.js';
+import { logsService } from '@/services/logs.service.js';
+import { config } from '@/shared/config/config.js';
+import { prisma } from '@/shared/db/prisma.js';
+import { logger } from '@/shared/logger.js';
 
 export interface Runtime {
   app: Express;
@@ -41,24 +24,17 @@ export interface Runtime {
   close(): Promise<void>;
 }
 
-/** Wires the application from its dependencies without listening or touching process-level state. */
-export function createRuntime(config: Config, deps: RuntimeDeps): Runtime {
-  const newId = deps.newId ?? randomUUIDv7;
-  const now = deps.now ?? (() => new Date());
-  const { serviceRepo, logRepo, analysisRepo, llm } = deps;
-  const logger = pino({ level: config.logLevel, redact: ['req.headers["x-api-key"]'] }, deps.logStream);
-  const runner = new AnalysisRunner({
-    repo: analysisRepo,
-    llm,
-    policy: { timeoutMs: config.llm.timeoutMs, maxRetries: config.llm.maxRetries },
-    now,
-    ...(deps.retry && { retry: deps.retry }),
+/** Wires the application from the module singletons without listening or touching process-level state. */
+export function createRuntime(): Runtime {
+  const routes = createApiRoutes({
+    logs: logsService,
+    analysis: analysisService,
+    checkDatabase: () => healthRepository.ping(),
+    now: () => new Date(),
   });
-  const logs = new LogsService({ logRepo, serviceRepo, newId });
-  const analysis = new AnalysisService({ logs, analysisRepo, runner, llm, newId, now });
-  const routes = createApiRoutes({ logs, analysis, checkDatabase: deps.checkDatabase, now });
-  const app = createApp({ logger, serviceRepo, routes });
+  const app = createApp({ logger, serviceRepo: serviceRepository, routes });
   const server = createServer(app);
+  const runner = analysisRunner;
 
   function listen(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -83,7 +59,7 @@ export function createRuntime(config: Config, deps: RuntimeDeps): Runtime {
     const steps: [string, () => Promise<void>][] = [
       ['stop the HTTP server', stopListening],
       ['shut down the analysis runner', () => runner.shutdown()],
-      ['disconnect from the database', deps.disconnect],
+      ['disconnect from the database', () => prisma.$disconnect()],
     ];
     for (const [label, step] of steps) {
       try {
@@ -103,7 +79,7 @@ export function createRuntime(config: Config, deps: RuntimeDeps): Runtime {
     logger,
     async start() {
       // Before listening: leftover PROCESSING rows of a dead process would make every POST answer 409.
-      await recoverInterrupted(analysisRepo, logger);
+      await recoverInterrupted(analysisRepository, logger);
       await listen();
     },
     close() {

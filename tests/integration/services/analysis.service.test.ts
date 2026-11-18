@@ -1,56 +1,48 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
-import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
-import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
-import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
-import { AnalysisService, type AnalysisServiceDeps } from '@/services/analysis.service.js';
-import { LogsService } from '@/services/logs.service.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { analysisRepository as analysisRepo } from '@/repositories/analysis.repository.js';
+import { analysisRunner } from '@/services/analysis-runner.js';
+import { analysisService } from '@/services/analysis.service.js';
 import { ConflictError, NotFoundError, UnprocessableError } from '@/shared/errors.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { analysisId, logId, makeLog } from '@tests/support/fixtures.js';
 import { insertLogs, resetDatabaseWithService } from '@tests/support/integration/database.js';
 
 const NOW = new Date('2026-11-04T12:00:00.000Z');
 
-const prisma = createPrismaClient(inject('databaseUrl'));
-const analysisRepo = new PrismaAnalysisRepository(prisma);
-const logs = new LogsService({
-  logRepo: new PrismaLogRepository(prisma),
-  serviceRepo: new PrismaServiceRepository(prisma),
-  newId: () => logId(900),
-});
+// Analysis ids come from one counter (the same values as `analysisId(n)`) and the model is a scripted one.
+const ids = vi.hoisted(() => ({ counter: 0 }));
+vi.mock('node:crypto', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:crypto')>()),
+  randomUUIDv7: () => `0192f1c0-aaaa-7000-8000-${String((ids.counter += 1)).padStart(12, '0')}`,
+}));
+vi.mock('@/llm/llm.js', async () => (await import('@tests/support/fakes/scripted-llm-module.js')).scriptedLlmModule());
+
 const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
+/** The service under test, with the runner replaced by a spy so no job runs. */
 function setup() {
-  const runner = { start: vi.fn<AnalysisServiceDeps['runner']['start']>() };
-  let counter = 0;
-  const service = new AnalysisService({
-    logs,
-    analysisRepo,
-    runner,
-    llm: { provider: 'scripted', model: 'scripted-model' },
-    newId: () => analysisId((counter += 1)),
-    now: () => NOW,
-  });
-  return { service, runner };
+  const runner = vi.spyOn(analysisRunner, 'start').mockImplementation(() => undefined);
+  return { service: analysisService, runner };
 }
 
 const seedLogs = (count: number) =>
-  insertLogs(
-    prisma,
-    Array.from({ length: count }, (_, i) => makeLog(i + 1)),
+  insertLogs(Array.from({ length: count }, (_, i) => makeLog(i + 1)),
   );
 
 beforeAll(async () => {
   await prisma.$connect();
+  vi.useFakeTimers({ toFake: ['Date'], now: NOW });
 });
 
 afterAll(async () => {
+  vi.useRealTimers();
   await prisma.$disconnect();
 });
 
 beforeEach(async () => {
   vi.restoreAllMocks();
-  await resetDatabaseWithService(prisma);
+  ids.counter = 0;
+  await resetDatabaseWithService();
 });
 
 describe('AnalysisService.start against Postgres', () => {
@@ -69,12 +61,12 @@ describe('AnalysisService.start against Postgres', () => {
       model: 'scripted-model',
       createdAt: NOW,
     });
-    expect(runner.start).toHaveBeenCalledOnce();
-    const [job, passedLog] = runner.start.mock.calls[0] ?? [];
+    expect(runner).toHaveBeenCalledOnce();
+    const [job, passedLog] = runner.mock.calls[0] ?? [];
     expect(job).toMatchObject({ analysisId: analysisId(1), createdAt: NOW });
     expect(job?.logs).toHaveLength(3);
     expect(passedLog).toBe(log);
-    expect(createProcessing.mock.invocationCallOrder[0]).toBeLessThan(runner.start.mock.invocationCallOrder[0] ?? 0);
+    expect(createProcessing.mock.invocationCallOrder[0]).toBeLessThan(runner.mock.invocationCallOrder[0] ?? 0);
   });
 
   it('analyzes only one page and reports hasMore and nextCursor', async () => {
@@ -86,7 +78,7 @@ describe('AnalysisService.start against Postgres', () => {
     expect(result.hasMore).toBe(true);
     expect(result.nextCursor).toEqual(expect.any(String));
     expect((await analysisRepo.findById(result.id))?.logCount).toBe(2);
-    expect(runner.start.mock.calls[0]?.[0].logs).toHaveLength(2);
+    expect(runner.mock.calls[0]?.[0].logs).toHaveLength(2);
   });
 
   it('an empty page is a 422 NO_LOGS_TO_ANALYZE before any insert', async () => {
@@ -98,7 +90,7 @@ describe('AnalysisService.start against Postgres', () => {
     expect(error).toBeInstanceOf(UnprocessableError);
     expect(error).toMatchObject({ statusCode: 422, code: 'NO_LOGS_TO_ANALYZE' });
     expect(createProcessing).not.toHaveBeenCalled();
-    expect(runner.start).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it('a second analysis while one is PROCESSING is a 409 carrying the running id, without starting a job', async () => {
@@ -110,7 +102,7 @@ describe('AnalysisService.start against Postgres', () => {
 
     expect(error).toBeInstanceOf(ConflictError);
     expect(error).toMatchObject({ statusCode: 409, code: 'ANALYSIS_IN_PROGRESS', details: { id: first.id } });
-    expect(runner.start).toHaveBeenCalledOnce();
+    expect(runner).toHaveBeenCalledOnce();
     expect(await analysisRepo.findById(analysisId(2))).toBeNull();
   });
 

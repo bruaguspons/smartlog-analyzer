@@ -1,13 +1,13 @@
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
-import type { Runtime } from '@/composition/create-runtime.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createRuntime } from '@/composition/create-runtime.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { logId } from '@tests/support/fixtures.js';
-import { ScriptedLlmClient, okJson } from '@tests/support/fakes/scripted-llm-client.js';
 import { resetDatabaseWithService } from '@tests/support/integration/database.js';
-import { authHeaders, buildIntegrationRuntime } from '@tests/support/integration/integration-app.js';
+import { authHeaders } from '@tests/support/integration/integration-app.js';
 
-const prisma = createPrismaClient(inject('databaseUrl'));
+const { app } = createRuntime();
+
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const BASE = Date.parse('2026-11-04T09:00:00.000Z');
 
@@ -30,10 +30,9 @@ interface ErrorBody {
   error: { code: string };
 }
 
-let runtime: Runtime;
 
 const get = (url: string, headers: Record<string, string> = authHeaders) =>
-  request(runtime.app).get(url).set(headers);
+  request(app).get(url).set(headers);
 const getPage = async (url: string) => {
   const res = await get(url);
   expect(res.status).toBe(200);
@@ -62,18 +61,13 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await resetDatabaseWithService(prisma);
-  runtime = buildIntegrationRuntime({ prisma, llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })) });
-});
-
-afterEach(async () => {
-  await runtime.close();
+  await resetDatabaseWithService();
 });
 
 describe('POST /api/logs against Postgres', () => {
   const valid = { level: 'ERROR', timestamp: '2026-11-04T08:00:00.000Z', message: 'boom' };
   const post = (payload: object, headers: Record<string, string> = authHeaders) =>
-    request(runtime.app).post('/api/logs').set(headers).send(payload);
+    request(app).post('/api/logs').set(headers).send(payload);
 
   it('201 returns the stored log, with a UUIDv7 id and the service taken from the key', async () => {
     await prisma.service.create({ data: { name: 'other', apiKey: 'key-2' } });

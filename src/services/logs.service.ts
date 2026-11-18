@@ -1,6 +1,7 @@
+import { randomUUIDv7 } from 'node:crypto';
 import { LOG_LEVELS, type JsonObject, type Log, type LogCursor, type LogFilters, type LogLevel } from '@/models/log.js';
-import type { LogRepository } from '@/repositories/log.repository.js';
-import type { ServiceRepository } from '@/repositories/service.repository.js';
+import { logRepository } from '@/repositories/log.repository.js';
+import { serviceRepository } from '@/repositories/service.repository.js';
 import { encodeCursor } from '@/shared/cursor.js';
 
 export interface IngestLogCommand {
@@ -36,22 +37,10 @@ export interface LogStats {
   groups: LogStatsGroup[];
 }
 
-export interface LogsServiceDeps {
-  logRepo: LogRepository;
-  serviceRepo: ServiceRepository;
-  newId: () => string;
-}
-
-export class LogsService {
-  private readonly deps: LogsServiceDeps;
-
-  constructor(deps: LogsServiceDeps) {
-    this.deps = deps;
-  }
-
+export const logsService = {
   ingest(cmd: IngestLogCommand): Promise<Log> {
-    return this.deps.logRepo.create({
-      id: this.deps.newId(),
+    return logRepository.create({
+      id: randomUUIDv7(),
       serviceId: cmd.serviceId,
       level: cmd.level,
       timestamp: cmd.timestamp,
@@ -59,23 +48,23 @@ export class LogsService {
       traceId: cmd.traceId ?? null,
       metadata: cmd.metadata ?? null,
     });
-  }
+  },
 
   async list(query: ListLogsQuery): Promise<LogPage> {
     // One extra row tells whether another page exists without a count query.
-    const rows = await this.deps.logRepo.list(query.filters, { take: query.limit + 1, cursor: query.cursor });
+    const rows = await logRepository.list(query.filters, { take: query.limit + 1, cursor: query.cursor });
     const hasMore = rows.length > query.limit;
     const items = hasMore ? rows.slice(0, query.limit) : rows;
     const last = items.at(-1);
     const nextCursor = hasMore && last ? encodeCursor({ timestamp: last.timestamp, id: last.id }) : null;
     return { items, nextCursor, hasMore };
-  }
+  },
 
   async stats(filters: LogFilters): Promise<LogStats> {
-    const counts = await this.deps.logRepo.countByServiceAndLevel(filters);
+    const counts = await logRepository.countByServiceAndLevel(filters);
     if (counts.length === 0) return { total: 0, groups: [] };
 
-    const names = await this.deps.serviceRepo.findNamesByIds([...new Set(counts.map((c) => c.serviceId))]);
+    const names = await serviceRepository.findNamesByIds([...new Set(counts.map((c) => c.serviceId))]);
     const groups = counts.map((c): LogStatsGroup => {
       const name = names.get(c.serviceId);
       // FK logs.service_id and no delete path make this an invariant break: fail loudly (500) rather than skew `total`.
@@ -86,5 +75,7 @@ export class LogsService {
       (a, b) => a.service.id - b.service.id || LOG_LEVELS.indexOf(a.level) - LOG_LEVELS.indexOf(b.level),
     );
     return { total: groups.reduce((sum, g) => sum + g.count, 0), groups };
-  }
-}
+  },
+};
+
+export type LogsService = typeof logsService;

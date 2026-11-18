@@ -1,16 +1,17 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
-import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
-import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
-import { LogsService } from '@/services/logs.service.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logRepository as logRepo } from '@/repositories/log.repository.js';
+import { serviceRepository as serviceRepo } from '@/repositories/service.repository.js';
+import { logsService as service } from '@/services/logs.service.js';
 import { decodeCursor, encodeCursor } from '@/shared/cursor.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { logId, makeLog, makeService } from '@tests/support/fixtures.js';
 import { insertLogs, resetDatabase } from '@tests/support/integration/database.js';
 
-const prisma = createPrismaClient(inject('databaseUrl'));
-const logRepo = new PrismaLogRepository(prisma);
-const serviceRepo = new PrismaServiceRepository(prisma);
-const service = new LogsService({ logRepo, serviceRepo, newId: () => logId(900) });
+// Every generated id is `logId(900)`.
+vi.mock('node:crypto', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:crypto')>()),
+  randomUUIDv7: () => '0192f1c0-bbbb-7000-8000-000000000900',
+}));
 
 const base = { serviceId: 1, level: 'INFO', timestamp: new Date('2026-11-03T10:00:00Z'), message: 'hi' } as const;
 
@@ -24,12 +25,12 @@ afterAll(async () => {
 
 beforeEach(async () => {
   vi.restoreAllMocks();
-  await resetDatabase(prisma);
+  await resetDatabase();
   await prisma.service.createMany({ data: [makeService(1), makeService(2), makeService(3, { isActive: false })] });
 });
 
 describe('LogsService.ingest', () => {
-  it('takes the id from newId and the serviceId from the command, and stores the row', async () => {
+  it('generates the id and takes the serviceId from the command, and stores the row', async () => {
     const log = await service.ingest(base);
 
     expect(log.id).toBe(logId(900));
@@ -67,9 +68,7 @@ describe('LogsService.ingest', () => {
 
 describe('LogsService.list', () => {
   const seeded = (count: number) =>
-    insertLogs(
-      prisma,
-      Array.from({ length: count }, (_, i) => makeLog(i + 1)),
+    insertLogs(Array.from({ length: count }, (_, i) => makeLog(i + 1)),
     );
 
   it('asks the repository for limit + 1 rows and passes filters and cursor through', async () => {
@@ -137,9 +136,7 @@ describe('LogsService.stats', () => {
   it('sorts by service id then severity whatever order the repository returns', async () => {
     const levels = ['INFO', 'FATAL', 'DEBUG', 'ERROR', 'WARN', 'INFO'] as const;
     const services = [2, 1, 1, 1, 1, 1];
-    await insertLogs(
-      prisma,
-      levels.map((level, i) => makeLog(i + 1, { level, serviceId: services[i] ?? 1 })),
+    await insertLogs(levels.map((level, i) => makeLog(i + 1, { level, serviceId: services[i] ?? 1 })),
     );
     // The order of the repository groups is unspecified; reverse it to prove the service sorts.
     const original = logRepo.countByServiceAndLevel.bind(logRepo);
@@ -158,7 +155,7 @@ describe('LogsService.stats', () => {
   });
 
   it('total is the sum of the counts and names come from the service repository, inactive included', async () => {
-    await insertLogs(prisma, [
+    await insertLogs([
       makeLog(1, { serviceId: 1, level: 'ERROR' }),
       makeLog(2, { serviceId: 1, level: 'ERROR' }),
       ...[3, 4, 5, 6, 7].map((n) => makeLog(n, { serviceId: 3, level: 'INFO' })),

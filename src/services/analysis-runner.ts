@@ -1,5 +1,7 @@
+import { llmClient } from '@/llm/llm.js';
 import type { JobLog } from '@/models/analysis.js';
-import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
+import { analysisRepository, type AnalysisRepository } from '@/repositories/analysis.repository.js';
+import { config } from '@/shared/config/config.js';
 import {
   AnalysisProcessingError,
   markInternalError,
@@ -87,3 +89,11 @@ export async function recoverInterrupted(repo: AnalysisRepository, log: JobLog):
   if (ids.length > 0) log.warn({ analysisIds: ids }, 'marked leftover PROCESSING analyses as INTERRUPTED');
   return ids;
 }
+
+/** The runner of this process; its policy comes from the configuration. */
+export const analysisRunner = new AnalysisRunner({
+  repo: analysisRepository,
+  llm: llmClient,
+  policy: { timeoutMs: config.llm.timeoutMs, maxRetries: config.llm.maxRetries },
+  now: () => new Date(),
+});

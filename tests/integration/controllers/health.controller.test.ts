@@ -1,22 +1,15 @@
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
-import type { Runtime } from '@/composition/create-runtime.js';
-import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
-import { okJson, ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRuntime, type Runtime } from '@/composition/create-runtime.js';
+import { healthRepository } from '@/repositories/health.repository.js';
+import { serviceRepository } from '@/repositories/service.repository.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { resetDatabaseWithService } from '@tests/support/integration/database.js';
-import { buildIntegrationRuntime } from '@tests/support/integration/integration-app.js';
 
-const prisma = createPrismaClient(inject('databaseUrl'));
-let runtime: Runtime;
-
-function build(checkDatabase?: () => Promise<void>): Runtime {
-  runtime = buildIntegrationRuntime({
-    prisma,
-    llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })),
-    ...(checkDatabase && { checkDatabase }),
-  });
-  return runtime;
+/** The app over the real database; `ping` is replaced only when a test needs the database to fail or hang. */
+function build(ping?: () => Promise<void>): Runtime {
+  if (ping) vi.spyOn(healthRepository, 'ping').mockImplementation(ping);
+  return createRuntime();
 }
 
 beforeAll(async () => {
@@ -28,18 +21,17 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await resetDatabaseWithService(prisma);
+  await resetDatabaseWithService();
 });
 
-afterEach(async () => {
+afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
-  await runtime.close();
 });
 
 describe('GET /api/health against Postgres', () => {
   it('returns 200 ok when the database answers, without an API key', async () => {
-    const findByApiKey = vi.spyOn(PrismaServiceRepository.prototype, 'findByApiKey');
+    const findByApiKey = vi.spyOn(serviceRepository, 'findByApiKey');
 
     const res = await request(build().app).get('/api/health');
 
@@ -49,7 +41,7 @@ describe('GET /api/health against Postgres', () => {
   });
 
   it('ignores an invalid API key (public route)', async () => {
-    const findByApiKey = vi.spyOn(PrismaServiceRepository.prototype, 'findByApiKey');
+    const findByApiKey = vi.spyOn(serviceRepository, 'findByApiKey');
 
     const res = await request(build().app).get('/api/health').set('x-api-key', 'unknown');
 

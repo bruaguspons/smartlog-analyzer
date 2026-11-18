@@ -1,26 +1,24 @@
 import type { RequestHandler } from 'express';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { Service } from '@/models/service.js';
-import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
-import type { ServiceRepository } from '@/repositories/service.repository.js';
+import { serviceRepository, type ServiceRepository } from '@/repositories/service.repository.js';
 import { requireApiKey } from '@/middlewares/require-api-key.js';
 import type { RouteDefinition } from '@/routes/mount-routes.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { buildTestApp } from '@tests/support/apps/express-test-app.js';
 import { makeService } from '@tests/support/fixtures.js';
 import { resetDatabase } from '@tests/support/integration/database.js';
 
-const prisma = createPrismaClient(inject('databaseUrl'));
 const active = makeService(7, { apiKey: 'k-active' });
 const off = makeService(8, { apiKey: 'k-off', isActive: false });
 
 /** The real repository over Postgres, with `findByApiKey` spied so a test can count lookups. */
 async function spiedRepo(services: Service[] = [active, off]) {
-  await resetDatabase(prisma);
+  await resetDatabase();
   await prisma.service.createMany({ data: services });
-  const inner = new PrismaServiceRepository(prisma);
+  const inner = serviceRepository;
   const findByApiKey = vi.fn((key: string) => inner.findByApiKey(key));
   return { repo: { findByApiKey, findNamesByIds: (ids: readonly number[]) => inner.findNamesByIds(ids) } satisfies ServiceRepository, findByApiKey };
 }
@@ -34,7 +32,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await resetDatabase(prisma);
+  await resetDatabase();
 });
 
 const handler = vi.fn<RequestHandler>((_req, res) => {

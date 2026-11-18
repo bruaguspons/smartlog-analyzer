@@ -1,14 +1,11 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi, type Mock } from 'vitest';
-import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { analysisRepository as repo } from '@/repositories/analysis.repository.js';
 import { AnalysisRunner, recoverInterrupted } from '@/services/analysis-runner.js';
 import type { AnalysisJob } from '@/services/process-analysis.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';
 import { analysisId, logId, makeLog } from '@tests/support/fixtures.js';
 import { insertLogs, resetDatabaseWithService } from '@tests/support/integration/database.js';
-
-const prisma = createPrismaClient(inject('databaseUrl'));
-const repo = new PrismaAnalysisRepository(prisma);
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -20,8 +17,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   vi.restoreAllMocks();
-  await resetDatabaseWithService(prisma);
-  await insertLogs(prisma, logs);
+  await resetDatabaseWithService();
+  await insertLogs(logs);
 });
 
 const CREATED_AT = new Date('2026-11-04T10:00:00.000Z');

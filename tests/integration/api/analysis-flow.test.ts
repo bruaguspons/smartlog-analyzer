@@ -1,17 +1,19 @@
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
-import type { Runtime } from '@/composition/create-runtime.js';
-import { recoverInterrupted } from '@/services/analysis-runner.js';
-import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
-import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRuntime } from '@/composition/create-runtime.js';
+import { analysisRepository } from '@/repositories/analysis.repository.js';
+import { analysisRunner, recoverInterrupted } from '@/services/analysis-runner.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { analysisId, logId } from '@tests/support/fixtures.js';
-import { hangUntilAborted, okJson, ScriptedLlmClient, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
-import { resetDatabaseWithService } from '@tests/support/integration/database.js';
-import { authHeaders as headers, buildIntegrationRuntime } from '@tests/support/integration/integration-app.js';
+import { hangUntilAborted, okJson } from '@tests/support/fakes/scripted-llm-client.js';
+import { resetDatabaseWithService, settleAnalyses } from '@tests/support/integration/database.js';
+import { authHeaders as headers } from '@tests/support/integration/integration-app.js';
+import { scriptedLlm } from '@tests/support/integration/scripted-llm.js';
 
-const prisma = createPrismaClient(inject('databaseUrl'));
-const analysisRepo = new PrismaAnalysisRepository(prisma);
+vi.mock('@/llm/llm.js', async () => (await import('@tests/support/fakes/scripted-llm-module.js')).scriptedLlmModule());
+
+const { app } = createRuntime();
+const llm = scriptedLlm();
 const silent = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
 interface Body {
@@ -19,19 +21,7 @@ interface Body {
   error?: { code: string; details?: { id: string } };
 }
 
-let runtime: Runtime;
-let runner: Runtime['runner'];
-
-function build(wrapAnalysisRepo: ((repo: AnalysisRepository) => AnalysisRepository) | undefined, ...script: ScriptStep[]): void {
-  runtime = buildIntegrationRuntime({
-    prisma,
-    llm: new ScriptedLlmClient(...script),
-    ...(wrapAnalysisRepo && { wrapAnalysisRepo }),
-  });
-  ({ runner } = runtime);
-}
-
-const post = () => request(runtime.app).post('/api/logs/analyze').set(headers).send({});
+const post = () => request(app).post('/api/logs/analyze').set(headers).send({});
 const body = (res: { body: unknown }) => res.body as Body;
 
 beforeAll(async () => {
@@ -43,7 +33,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await resetDatabaseWithService(prisma);
+  await resetDatabaseWithService();
   await prisma.log.createMany({
     data: [1, 2, 3].map((n) => ({
       id: logId(n),
@@ -56,13 +46,13 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await runner.shutdown();
-  await runtime.close();
+  vi.restoreAllMocks();
+  await settleAnalyses({ llm, runner: analysisRunner });
 });
 
 describe('analysis flow against Postgres', () => {
   it('two simultaneous POSTs produce exactly one 202 and one 409 naming the winner', async () => {
-    build(undefined, hangUntilAborted);
+    llm.reset(hangUntilAborted);
 
     const results = await Promise.all([post(), post()]);
 
@@ -79,9 +69,9 @@ describe('analysis flow against Postgres', () => {
   });
 
   it('a new analysis is accepted after the previous one reached a terminal state', async () => {
-    build(undefined, okJson({ summary: 'Summary', findings: [] }));
+    llm.reset(okJson({ summary: 'Summary', findings: [] }));
     expect((await post()).status).toBe(202);
-    await runner.idle();
+    await analysisRunner.idle();
     expect(await prisma.analysis.count({ where: { status: 'COMPLETED' } })).toBe(1);
 
     const second = await post();
@@ -90,14 +80,14 @@ describe('analysis flow against Postgres', () => {
   });
 
   it('startup recovery closes leftover PROCESSING rows and unblocks POST', async () => {
-    build(undefined, okJson({ summary: 'Summary', findings: [] }));
-    await analysisRepo.createProcessing(
+    llm.reset(okJson({ summary: 'Summary', findings: [] }));
+    await analysisRepository.createProcessing(
       { id: analysisId(1), provider: 'mock', model: 'mock', createdAt: new Date() },
       [logId(1)],
     );
     expect((await post()).status).toBe(409);
 
-    await recoverInterrupted(analysisRepo, silent);
+    await recoverInterrupted(analysisRepository, silent);
 
     expect(await prisma.analysis.findUniqueOrThrow({ where: { id: analysisId(1) } })).toMatchObject({
       status: 'FAILED',
@@ -109,21 +99,17 @@ describe('analysis flow against Postgres', () => {
   it('when saving the COMPLETED result fails nothing partial is stored and the analysis ends FAILED', async () => {
     const finding = { category: 'DATABASE', severity: 'HIGH', description: 'd', suggestions: [], logRefs: [1] };
     // Sabotage: add a finding that points at a log outside the analysis, which the repository rejects.
-    const sabotage = (repo: AnalysisRepository): AnalysisRepository => ({
-      createProcessing: (a, ids) => repo.createProcessing(a, ids),
-      complete: (id, input) =>
-        repo.complete(id, {
-          ...input,
-          findings: [...input.findings, { category: 'OTHER', severity: 'LOW', description: 'x', suggestions: [], logIds: [logId(99)] }],
-        }),
-      fail: (id, input) => repo.fail(id, input),
-      failAllProcessing: (input) => repo.failAllProcessing(input),
-      findById: (id) => repo.findById(id),
-    });
-    build(sabotage, okJson({ summary: 'Summary', findings: [finding] }, { prompt: 8, completion: 2 }));
+    const complete = analysisRepository.complete.bind(analysisRepository);
+    vi.spyOn(analysisRepository, 'complete').mockImplementation((id, input) =>
+      complete(id, {
+        ...input,
+        findings: [...input.findings, { category: 'OTHER', severity: 'LOW', description: 'x', suggestions: [], logIds: [logId(99)] }],
+      }),
+    );
+    llm.reset(okJson({ summary: 'Summary', findings: [finding] }, { prompt: 8, completion: 2 }));
 
     const { id } = body(await post());
-    await runner.idle();
+    await analysisRunner.idle();
 
     expect(await prisma.analysisFinding.count()).toBe(0);
     expect(await prisma.findingLog.count()).toBe(0);

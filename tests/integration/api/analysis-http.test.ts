@@ -6,32 +6,31 @@ import {
   beforeEach,
   describe,
   expect,
-  inject,
   it,
+  vi,
 } from "vitest";
-import type { Runtime } from '@/composition/create-runtime.js';
+import { createRuntime, type Runtime } from '@/composition/create-runtime.js';
 import { LlmError } from '@/llm/llm-client.js';
-import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { analysisRepository as repo } from '@/repositories/analysis.repository.js';
+import type { AnalysisRunner } from '@/services/analysis-runner.js';
+import { prisma } from '@/shared/db/prisma.js';
 import { analysisId, logId } from '@tests/support/fixtures.js';
 import {
   hangUntilAborted,
   okJson,
-  ScriptedLlmClient,
   type ScriptStep,
 } from '@tests/support/fakes/scripted-llm-client.js';
 import { resetDatabaseWithService } from '@tests/support/integration/database.js';
-import {
-  authHeaders as headers,
-  buildIntegrationRuntime,
-} from '@tests/support/integration/integration-app.js';
+import { authHeaders as headers, useFreshRunner } from '@tests/support/integration/integration-app.js';
+import { scriptedLlm } from '@tests/support/integration/scripted-llm.js';
+
+vi.mock('@/llm/llm.js', async () => (await import('@tests/support/fakes/scripted-llm-module.js')).scriptedLlmModule());
 
 /**
  * Analysis outcomes end to end: HTTP -> real composition -> Postgres, with only the LLM scripted.
  * Timeouts use a real short `LLM_TIMEOUT_MS`; the backoff sleep is instant (see the harness).
  * The 409 while an analysis is PROCESSING and boot-time recovery are covered in analysis-flow.test.ts.
  */
-const prisma = createPrismaClient(inject("databaseUrl"));
 const TIMEOUT_MS = 50;
 const BASE = Date.parse("2026-11-04T09:00:00.000Z");
 
@@ -49,28 +48,21 @@ interface AnalysisBody {
   findings: { category: string; severity: string; logIds: string[] }[];
 }
 
+const llm = scriptedLlm();
 let runtime: Runtime;
-let runner: Runtime["runner"];
-let llm: ScriptedLlmClient;
-let closed = false;
+/** The runner serving this test; `analysisRunner` is routed to it (see `useFreshRunner`). */
+let runner: AnalysisRunner;
 
 function build(
   options: {
     maxRetries?: number;
     timeoutMs?: number;
-    onDisconnect?: () => Promise<void>;
   },
   ...script: ScriptStep[]
 ): void {
-  llm = new ScriptedLlmClient(...script);
-  runtime = buildIntegrationRuntime({
-    prisma,
-    llm,
-    timeoutMs: TIMEOUT_MS,
-    ...options,
-  });
-  ({ runner } = runtime);
-  closed = false;
+  llm.reset(...script);
+  runner = useFreshRunner({ timeoutMs: TIMEOUT_MS, ...options });
+  runtime = createRuntime();
 }
 
 const analyze = (payload: object = {}) =>
@@ -139,12 +131,14 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await resetDatabaseWithService(prisma);
+  await resetDatabaseWithService();
 });
 
 afterEach(async () => {
-  if (closed) return;
-  await runtime.close();
+  // Frees a hung call and waits for every job to write its terminal state before the next test empties the tables.
+  llm.releaseHanging();
+  await runner.shutdown();
+  vi.restoreAllMocks();
 });
 
 describe("LLM outcomes persisted in Postgres", () => {
@@ -372,15 +366,11 @@ describe("shutdown", () => {
     await seedLogs(2);
     let idAtDisconnect = "";
     let rowAtDisconnect: Awaited<ReturnType<typeof dbRow>> | undefined;
-    build(
-      {
-        timeoutMs: 60_000,
-        onDisconnect: async () => {
-          rowAtDisconnect = await dbRow(idAtDisconnect);
-        },
-      },
-      hangUntilAborted,
-    );
+    build({ timeoutMs: 60_000 }, hangUntilAborted);
+    // The pool belongs to the whole test file, so the disconnect step only records what it sees.
+    vi.spyOn(prisma, "$disconnect").mockImplementation(async () => {
+      rowAtDisconnect = await dbRow(idAtDisconnect);
+    });
     const res = await analyze();
     expect(res.status).toBe(202);
     const { id } = res.body as Started;
@@ -389,7 +379,6 @@ describe("shutdown", () => {
     expect((await dbRow(id)).status).toBe("PROCESSING");
 
     await runtime.close();
-    closed = true;
 
     expect(await dbRow(id)).toMatchObject({
       status: "FAILED",
@@ -520,7 +509,6 @@ describe("terminal writes are compare-and-set", () => {
   it("concurrent complete and fail on one analysis leave exactly one winner and a consistent row", async () => {
     await seedLogs(2);
     build({}, okJson({ summary: "s", findings: [] }));
-    const repo = new PrismaAnalysisRepository(prisma);
     const finding = {
       category: "OTHER" as const,
       severity: "LOW" as const,

@@ -1,33 +1,44 @@
 import { createServer } from 'node:http';
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
-import { createRuntime, type Runtime, type RuntimeDeps } from '@/composition/create-runtime.js';
-import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
-import type { Config } from '@/shared/config/load-config.js';
-import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
-import { hangUntilAborted, okJson, ScriptedLlmClient, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRuntime, type Runtime } from '@/composition/create-runtime.js';
+import { analysisRepository as analysisRepo } from '@/repositories/analysis.repository.js';
+import { config } from '@/shared/config/config.js';
+import { prisma } from '@/shared/db/prisma.js';
+import { hangUntilAborted, okJson, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
 import { analysisId, logId, makeLog } from '@tests/support/fixtures.js';
 import { insertLogs, resetDatabaseWithService } from '@tests/support/integration/database.js';
-import { authHeaders as headers, buildIntegrationDeps } from '@tests/support/integration/integration-app.js';
+import { authHeaders as headers, useFreshRunner } from '@tests/support/integration/integration-app.js';
+import { scriptedLlm } from '@tests/support/integration/scripted-llm.js';
 
-const prisma = createPrismaClient(inject('databaseUrl'));
-const analysisRepo = new PrismaAnalysisRepository(prisma);
+// Analysis ids come from one counter (the same values as `analysisId(n)`) and the model is a scripted one.
+const ids = vi.hoisted(() => ({ counter: 0 }));
+vi.mock('node:crypto', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:crypto')>()),
+  randomUUIDv7: () => `0192f1c0-aaaa-7000-8000-${String((ids.counter += 1)).padStart(12, '0')}`,
+}));
+vi.mock('@/llm/llm.js', async () => (await import('@tests/support/fakes/scripted-llm-module.js')).scriptedLlmModule());
+
 const createdAt = new Date('2026-11-04T10:00:00.000Z');
 
-/** Real repositories over Postgres with a scripted model; `disconnect` is a spy so tests can observe the order. */
+/**
+ * A scripted model, a runner that can be shut down for good, and a `$disconnect` spy so tests can observe
+ * the order (the pool belongs to the whole test file).
+ */
 function fixture(...script: ScriptStep[]) {
-  const llm = new ScriptedLlmClient(...(script.length > 0 ? script : [okJson({ summary: 's', findings: [] })]));
-  const disconnect = vi.fn<() => Promise<void>>(() => Promise.resolve());
-  const { config: base, deps } = buildIntegrationDeps({ prisma, llm, wrapAnalysisRepo: () => analysisRepo, onDisconnect: disconnect });
-  // PORT=0 is rejected by the env schema on purpose; tests listen on an ephemeral port instead.
-  const config: Config = { ...base, port: 0, host: '127.0.0.1' };
-  return { config, llm, disconnect, deps };
+  const llm = scriptedLlm();
+  llm.reset(...(script.length > 0 ? script : [okJson({ summary: 's', findings: [] })]));
+  useFreshRunner();
+  const disconnect = vi.spyOn(prisma, '$disconnect').mockResolvedValue();
+  return { llm, disconnect };
 }
 const leftoverProcessing = () =>
   analysisRepo.createProcessing({ id: analysisId(9), provider: 'mock', model: 'mock', createdAt }, [logId(1)]);
 
 beforeAll(async () => {
   await prisma.$connect();
+  // PORT=0 is rejected by the env schema on purpose; tests listen on an ephemeral port instead.
+  Object.assign(config, { port: 0, host: '127.0.0.1' });
 });
 
 afterAll(async () => {
@@ -36,14 +47,16 @@ afterAll(async () => {
 
 beforeEach(async () => {
   vi.restoreAllMocks();
-  await resetDatabaseWithService(prisma);
-  await insertLogs(prisma, [makeLog(1), makeLog(2)]);
+  ids.counter = 0;
+  config.port = 0;
+  await resetDatabaseWithService();
+  await insertLogs([makeLog(1), makeLog(2)]);
 });
 
 describe('createRuntime against Postgres', () => {
   let current: Runtime | undefined;
   /** Registers the runtime so `afterEach` closes it even when a test fails. */
-  const create = (config: Config, deps: RuntimeDeps) => (current = createRuntime(config, deps));
+  const create = () => (current = createRuntime());
 
   afterEach(async () => {
     await current?.close();
@@ -51,9 +64,9 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('leftover PROCESSING rows are recovered before the server listens, so the first POST is accepted', async () => {
-    const { config, deps } = fixture();
+    fixture();
     await leftoverProcessing();
-    const runtime = create(config, deps);
+    const runtime = create();
     const recover = analysisRepo.failAllProcessing.bind(analysisRepo);
     const listeningWhenRecovering: boolean[] = [];
     vi.spyOn(analysisRepo, 'failAllProcessing').mockImplementation((...args) => {
@@ -72,9 +85,9 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('when recovery fails, start() rejects and the server never listens', async () => {
-    const { config, deps } = fixture();
+    fixture();
     vi.spyOn(analysisRepo, 'failAllProcessing').mockRejectedValue(new Error('db down'));
-    const runtime = create(config, deps);
+    const runtime = create();
 
     await expect(runtime.start()).rejects.toThrow('db down');
 
@@ -82,13 +95,12 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('in-flight analyses are closed as INTERRUPTED before the database is disconnected', async () => {
-    const { config, llm, disconnect, deps } = fixture(hangUntilAborted);
+    const { llm, disconnect } = fixture(hangUntilAborted);
     let statusAtDisconnect: string | undefined;
     disconnect.mockImplementation(async () => {
       statusAtDisconnect = (await analysisRepo.findById(analysisId(1)))?.status;
     });
-    let counter = 0;
-    const runtime = create(config, { ...deps, newId: () => analysisId((counter += 1)) });
+    const runtime = create();
     await runtime.start();
     const res = await request(runtime.server).post('/api/logs/analyze').set(headers).send({});
     expect(res.status).toBe(202);
@@ -104,7 +116,7 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('a slow runner shutdown delays the disconnect until it has finished', async () => {
-    const { config, llm, disconnect, deps } = fixture(hangUntilAborted);
+    const { llm, disconnect } = fixture(hangUntilAborted);
     const realFail = analysisRepo.fail.bind(analysisRepo);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -114,8 +126,7 @@ describe('createRuntime against Postgres', () => {
       await gate;
       return realFail(...args);
     });
-    let counter = 0;
-    const runtime = create(config, { ...deps, newId: () => analysisId((counter += 1)) });
+    const runtime = create();
     await runtime.start();
     await request(runtime.server).post('/api/logs/analyze').set(headers).send({});
     await vi.waitFor(() => {
@@ -132,8 +143,8 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('a failing runner shutdown does not prevent the disconnect, so the pool is always released', async () => {
-    const { config, disconnect, deps } = fixture();
-    const runtime = create(config, deps);
+    const { disconnect } = fixture();
+    const runtime = create();
     vi.spyOn(runtime.runner, 'shutdown').mockRejectedValue(new Error('shutdown failed'));
     await runtime.start();
 
@@ -143,13 +154,14 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('a listen error such as a port already in use rejects start()', async () => {
-    const { config, deps } = fixture();
+    fixture();
     const occupier = createServer();
     await new Promise<void>((resolve) => occupier.listen(0, '127.0.0.1', resolve));
     const address = occupier.address();
     const port = typeof address === 'object' && address ? address.port : 0;
     try {
-      const runtime = create({ ...config, port }, deps);
+      config.port = port;
+      const runtime = create();
 
       await expect(runtime.start()).rejects.toThrow(/EADDRINUSE/);
 
@@ -160,8 +172,8 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('close() stops the server, then the runner, then the database, each one only after the previous finished', async () => {
-    const { config, deps, disconnect } = fixture();
-    const runtime = create(config, deps);
+    const { disconnect } = fixture();
+    const runtime = create();
     await runtime.start();
     const order: string[] = [];
     const serverClose = runtime.server.close.bind(runtime.server);
@@ -184,8 +196,8 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('close() is idempotent: a second call shares the first one and nothing runs twice', async () => {
-    const { config, deps, disconnect } = fixture();
-    const runtime = create(config, deps);
+    const { disconnect } = fixture();
+    const runtime = create();
     await runtime.start();
     const shutdown = vi.spyOn(runtime.runner, 'shutdown');
 
@@ -197,8 +209,8 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('close() before start() skips the server but still closes the runner and the database', async () => {
-    const { config, deps, disconnect } = fixture();
-    const runtime = create(config, deps);
+    const { disconnect } = fixture();
+    const runtime = create();
 
     await runtime.close();
 
@@ -206,8 +218,8 @@ describe('createRuntime against Postgres', () => {
   });
 
   it('a failing server close does not stop the runner and the database from closing', async () => {
-    const { config, deps, disconnect } = fixture();
-    const runtime = create(config, deps);
+    const { disconnect } = fixture();
+    const runtime = create();
     await runtime.start();
     const shutdown = vi.spyOn(runtime.runner, 'shutdown');
     vi.spyOn(runtime.server, 'close').mockImplementation((callback) => {
