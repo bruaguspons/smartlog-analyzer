@@ -1,7 +1,6 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
 import type { RouteDefinition } from '@/routes/mount-routes.js';
 import { buildTestApp } from '@tests/support/apps/express-test-app.js';
 
@@ -18,7 +17,7 @@ const echo: RouteDefinition = {
     res.json({ received: body === undefined ? 'nothing' : body });
   },
 };
-const app = () => buildTestApp({ serviceRepo: new InMemoryServiceRepository(), routes: [echo] });
+const app = () => buildTestApp({ routes: [echo] });
 const post = () => request(app()).post('/api/echo');
 const code = (res: { body: unknown }) => (res.body as { error: { code: string; message: string } }).error;
 

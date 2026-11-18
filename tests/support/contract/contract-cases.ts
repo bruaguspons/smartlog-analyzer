@@ -1,9 +1,9 @@
+import { vi } from 'vitest';
+import type { Log } from '@/models/log.js';
+import type { LogRepository } from '@/repositories/log.repository.js';
 import type { AnalysisRunner } from '@/services/analysis-runner.js';
-import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
-import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
-import { analysisId } from '@tests/support/contracts/analysis-repository-contract.js';
-import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
+import { analysisId, makeLog } from '@tests/support/fixtures.js';
 
 /** A request described without reference to any HTTP framework, so every executor can replay it. */
 export interface ContractRequest {
@@ -25,10 +25,9 @@ export interface ContractReply {
 }
 
 export interface ContractWorld {
-  /** The app under test: its runner and in-memory fakes are exposed so a case can arrange state. */
+  /** The app under test: its runner and log repository are exposed so a case can await jobs or sabotage a read. */
   runner: Pick<AnalysisRunner, 'idle'>;
-  logRepo: InMemoryLogRepository;
-  analysisRepo: InMemoryAnalysisRepository;
+  logRepo: LogRepository;
   llm: ScriptedLlmClient;
   send: (request: ContractRequest) => Promise<ContractReply>;
 }
@@ -71,15 +70,17 @@ export const defaultScript = (): ScriptStep[] => [
 
 export const hangingScript = (): ScriptStep[] => [hangUntilAborted];
 
+/** The stored logs get these ids, which the golden file records. */
+const contractLogId = (n: number) => `0192f1c0-0000-7000-8000-${String(n).padStart(12, '0')}`;
+const contractLog = (n: number, overrides: Partial<Log>): Log => makeLog(n, { id: contractLogId(n), ...overrides });
+
 /** Three logs for service 7 (ERROR, INFO, ERROR) and one for service 8. */
-export function seedLogs(logRepo: InMemoryLogRepository): void {
-  logRepo.logs.push(
-    makeListLog(1, { serviceId: 7, level: 'ERROR', traceId: 'trace-1', metadata: { attempt: 1 } }),
-    makeListLog(2, { serviceId: 7, level: 'INFO' }),
-    makeListLog(3, { serviceId: 7, level: 'ERROR' }),
-    makeListLog(4, { serviceId: 8, level: 'WARN' }),
-  );
-}
+export const CONTRACT_LOGS: Log[] = [
+  contractLog(1, { serviceId: 7, level: 'ERROR', traceId: 'trace-1', metadata: { attempt: 1 } }),
+  contractLog(2, { serviceId: 7, level: 'INFO' }),
+  contractLog(3, { serviceId: 7, level: 'ERROR' }),
+  contractLog(4, { serviceId: 8, level: 'WARN' }),
+];
 
 const validLog = { level: 'ERROR', timestamp: '2026-11-04T08:00:00.000Z', message: 'boom', traceId: 't-1', metadata: { a: 1, nested: { b: [1, 'x', null] } } };
 const post = (url: string, body: string, headers: Record<string, string> = authJson): ContractRequest => ({ method: 'POST', url, headers, body });
@@ -224,7 +225,7 @@ export const CONTRACT_CASES: ContractCase[] = [
   {
     name: '500 hides the internal error',
     run: ({ send, logRepo }) => {
-      logRepo.list = () => Promise.reject(new Error('secret internal detail'));
+      vi.spyOn(logRepo, 'list').mockRejectedValue(new Error('secret internal detail'));
       return send(get('/api/logs'));
     },
   },

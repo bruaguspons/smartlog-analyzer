@@ -13,17 +13,17 @@ import type { Runtime } from '@/composition/create-runtime.js';
 import { LlmError } from '@/llm/llm-client.js';
 import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
-import { analysisId, logId } from '@tests/support/contracts/analysis-repository-contract.js';
+import { analysisId, logId } from '@tests/support/fixtures.js';
 import {
   hangUntilAborted,
   okJson,
   ScriptedLlmClient,
   type ScriptStep,
 } from '@tests/support/fakes/scripted-llm-client.js';
+import { resetDatabaseWithService } from '@tests/support/integration/database.js';
 import {
   authHeaders as headers,
   buildIntegrationRuntime,
-  resetDatabase,
 } from '@tests/support/integration/integration-app.js';
 
 /**
@@ -139,7 +139,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await resetDatabase(prisma);
+  await resetDatabaseWithService(prisma);
 });
 
 afterEach(async () => {

@@ -2,9 +2,8 @@ import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { RouteDefinition } from '@/routes/mount-routes.js';
-import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
 import type { ServiceRepository } from '@/repositories/service.repository.js';
-import { buildTestApp } from '@tests/support/apps/express-test-app.js';
+import { buildTestApp, stubServiceRepository } from '@tests/support/apps/express-test-app.js';
 
 const findByApiKey = vi.fn(() => Promise.resolve(null));
 const repo: ServiceRepository = { findByApiKey, findNamesByIds: () => Promise.resolve(new Map()) };
@@ -67,7 +66,7 @@ describe('createApp', () => {
   it('the x-api-key header never reaches the logs', async () => {
     const lines: string[] = [];
     const logged = buildTestApp({
-      serviceRepo: new InMemoryServiceRepository([{ id: 1, name: 's', description: null, apiKey: 'secret-key', isActive: true }]),
+      serviceRepo: stubServiceRepository([{ id: 1, name: 's', description: null, apiKey: 'secret-key', isActive: true }]),
       routes: [echo],
       logStream: { write: (m) => lines.push(m) },
     });

@@ -1,45 +1,49 @@
 import { createServer } from 'node:http';
 import request from 'supertest';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
 import { createRuntime, type Runtime, type RuntimeDeps } from '@/composition/create-runtime.js';
-import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
-import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
-import type { Service } from '@/models/service.js';
-import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
-import { loadConfig, type Config } from '@/shared/config/load-config.js';
-import { analysisId, logId } from '@tests/support/contracts/analysis-repository-contract.js';
-import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
+import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
+import type { Config } from '@/shared/config/load-config.js';
+import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
+import { analysisId, logId, makeLog } from '@tests/support/fixtures.js';
+import { insertLogs, resetDatabaseWithService } from '@tests/support/integration/database.js';
+import { authHeaders as headers, buildIntegrationDeps } from '@tests/support/integration/integration-app.js';
 
-const baseEnv = { DATABASE_URL: 'postgresql://u:p@localhost:5432/db', LOG_LEVEL: 'silent' };
-// PORT=0 is rejected by the env schema on purpose; tests listen on an ephemeral port instead.
-const config: Config = { ...loadConfig(baseEnv), port: 0, host: '127.0.0.1' };
-const service: Service = { id: 1, name: 'svc', description: null, apiKey: 'k', isActive: true };
-const headers = { 'x-api-key': 'k' };
+const prisma = createPrismaClient(inject('databaseUrl'));
+const analysisRepo = new PrismaAnalysisRepository(prisma);
 const createdAt = new Date('2026-11-04T10:00:00.000Z');
+
+/** Real repositories over Postgres with a scripted model; `disconnect` is a spy so tests can observe the order. */
 function fixture(...script: ScriptStep[]) {
-  const analysisRepo = new InMemoryAnalysisRepository();
-  const logRepo = new InMemoryLogRepository();
-  logRepo.logs.push(makeListLog(1), makeListLog(2));
   const llm = new ScriptedLlmClient(...(script.length > 0 ? script : [okJson({ summary: 's', findings: [] })]));
   const disconnect = vi.fn<() => Promise<void>>(() => Promise.resolve());
-  const deps: RuntimeDeps = {
-    serviceRepo: new InMemoryServiceRepository([service]),
-    logRepo,
-    analysisRepo,
-    llm,
-    checkDatabase: () => Promise.resolve(),
-    disconnect,
-  };
-  return { analysisRepo, llm, disconnect, deps };
+  const { config: base, deps } = buildIntegrationDeps({ prisma, llm, wrapAnalysisRepo: () => analysisRepo, onDisconnect: disconnect });
+  // PORT=0 is rejected by the env schema on purpose; tests listen on an ephemeral port instead.
+  const config: Config = { ...base, port: 0, host: '127.0.0.1' };
+  return { config, llm, disconnect, deps };
 }
-const leftoverProcessing = (repo: InMemoryAnalysisRepository) =>
-  repo.createProcessing({ id: analysisId(9), provider: 'mock', model: 'mock', createdAt }, [logId(1)]);
+const leftoverProcessing = () =>
+  analysisRepo.createProcessing({ id: analysisId(9), provider: 'mock', model: 'mock', createdAt }, [logId(1)]);
 
-describe('createRuntime', () => {
+beforeAll(async () => {
+  await prisma.$connect();
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+beforeEach(async () => {
+  vi.restoreAllMocks();
+  await resetDatabaseWithService(prisma);
+  await insertLogs(prisma, [makeLog(1), makeLog(2)]);
+});
+
+describe('createRuntime against Postgres', () => {
   let current: Runtime | undefined;
   /** Registers the runtime so `afterEach` closes it even when a test fails. */
-  const create = (...args: Parameters<typeof createRuntime>) => (current = createRuntime(...args));
+  const create = (config: Config, deps: RuntimeDeps) => (current = createRuntime(config, deps));
 
   afterEach(async () => {
     await current?.close();
@@ -47,8 +51,8 @@ describe('createRuntime', () => {
   });
 
   it('leftover PROCESSING rows are recovered before the server listens, so the first POST is accepted', async () => {
-    const { analysisRepo, deps } = fixture();
-    await leftoverProcessing(analysisRepo);
+    const { config, deps } = fixture();
+    await leftoverProcessing();
     const runtime = create(config, deps);
     const recover = analysisRepo.failAllProcessing.bind(analysisRepo);
     const listeningWhenRecovering: boolean[] = [];
@@ -68,7 +72,7 @@ describe('createRuntime', () => {
   });
 
   it('when recovery fails, start() rejects and the server never listens', async () => {
-    const { analysisRepo, deps } = fixture();
+    const { config, deps } = fixture();
     vi.spyOn(analysisRepo, 'failAllProcessing').mockRejectedValue(new Error('db down'));
     const runtime = create(config, deps);
 
@@ -78,7 +82,7 @@ describe('createRuntime', () => {
   });
 
   it('in-flight analyses are closed as INTERRUPTED before the database is disconnected', async () => {
-    const { analysisRepo, llm, disconnect, deps } = fixture(hangUntilAborted);
+    const { config, llm, disconnect, deps } = fixture(hangUntilAborted);
     let statusAtDisconnect: string | undefined;
     disconnect.mockImplementation(async () => {
       statusAtDisconnect = (await analysisRepo.findById(analysisId(1)))?.status;
@@ -100,7 +104,7 @@ describe('createRuntime', () => {
   });
 
   it('a slow runner shutdown delays the disconnect until it has finished', async () => {
-    const { analysisRepo, llm, disconnect, deps } = fixture(hangUntilAborted);
+    const { config, llm, disconnect, deps } = fixture(hangUntilAborted);
     const realFail = analysisRepo.fail.bind(analysisRepo);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -128,7 +132,7 @@ describe('createRuntime', () => {
   });
 
   it('a failing runner shutdown does not prevent the disconnect, so the pool is always released', async () => {
-    const { disconnect, deps } = fixture();
+    const { config, disconnect, deps } = fixture();
     const runtime = create(config, deps);
     vi.spyOn(runtime.runner, 'shutdown').mockRejectedValue(new Error('shutdown failed'));
     await runtime.start();
@@ -139,7 +143,7 @@ describe('createRuntime', () => {
   });
 
   it('a listen error such as a port already in use rejects start()', async () => {
-    const { deps } = fixture();
+    const { config, deps } = fixture();
     const occupier = createServer();
     await new Promise<void>((resolve) => occupier.listen(0, '127.0.0.1', resolve));
     const address = occupier.address();
@@ -156,7 +160,7 @@ describe('createRuntime', () => {
   });
 
   it('close() stops the server, then the runner, then the database, each one only after the previous finished', async () => {
-    const { deps, disconnect } = fixture();
+    const { config, deps, disconnect } = fixture();
     const runtime = create(config, deps);
     await runtime.start();
     const order: string[] = [];
@@ -180,7 +184,7 @@ describe('createRuntime', () => {
   });
 
   it('close() is idempotent: a second call shares the first one and nothing runs twice', async () => {
-    const { deps, disconnect } = fixture();
+    const { config, deps, disconnect } = fixture();
     const runtime = create(config, deps);
     await runtime.start();
     const shutdown = vi.spyOn(runtime.runner, 'shutdown');
@@ -193,7 +197,7 @@ describe('createRuntime', () => {
   });
 
   it('close() before start() skips the server but still closes the runner and the database', async () => {
-    const { deps, disconnect } = fixture();
+    const { config, deps, disconnect } = fixture();
     const runtime = create(config, deps);
 
     await runtime.close();
@@ -202,7 +206,7 @@ describe('createRuntime', () => {
   });
 
   it('a failing server close does not stop the runner and the database from closing', async () => {
-    const { deps, disconnect } = fixture();
+    const { config, deps, disconnect } = fixture();
     const runtime = create(config, deps);
     await runtime.start();
     const shutdown = vi.spyOn(runtime.runner, 'shutdown');

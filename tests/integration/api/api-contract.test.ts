@@ -1,6 +1,7 @@
 import request from 'supertest';
-import { afterEach, describe, expect, it } from 'vitest';
-import { buildContractRuntime } from '@tests/support/contract/build-contract-world.js';
+import { afterAll, beforeAll, describe, expect, inject, it, vi } from 'vitest';
+import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { buildContractRuntime } from '@tests/support/contract/contract-world.js';
 import {
   CONTRACT_CASES,
   type ContractCase,
@@ -10,9 +11,9 @@ import {
 } from '@tests/support/contract/contract-cases.js';
 
 /**
- * Replays the request matrix against an HTTP implementation and compares what comes back with a golden
- * file committed next to this test. The golden file is the definition of "same API" across framework changes.
- * The golden file was recorded before the framework switch and is never edited to make the app pass.
+ * Replays the request matrix against the real runtime over Postgres and compares what comes back with a
+ * golden file committed next to this test. The golden file is the definition of "same API" across refactors:
+ * it was recorded before the framework switch and is never edited to make the app pass.
  */
 type Executor = (request: ContractRequest) => Promise<ContractReply>;
 
@@ -31,17 +32,26 @@ function toReply(status: number, headers: Record<string, unknown>, text: string)
   };
 }
 
-const closers: (() => Promise<void>)[] = [];
+const prisma = createPrismaClient(inject('databaseUrl'));
 
-afterEach(async () => {
-  await Promise.all(closers.splice(0).map((close) => close()));
+beforeAll(async () => {
+  await prisma.$connect();
 });
 
-/** In-process supertest against the real runtime (without listening) built over in-memory fakes. */
-function world(testCase: ContractCase): ContractWorld {
-  const { runtime, logRepo, analysisRepo, llm } = buildContractRuntime(testCase.options);
+afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+/** One case: the world it runs in and how to close it. */
+interface BuiltWorld {
+  world: ContractWorld;
+  close: () => Promise<void>;
+}
+
+/** In-process supertest against the real runtime (without listening) over Postgres. */
+async function buildWorld(testCase: ContractCase): Promise<BuiltWorld> {
+  const { runtime, logRepo, llm } = await buildContractRuntime(prisma, testCase.options);
   const { app, runner } = runtime;
-  closers.push(() => runtime.close());
   const send: Executor = async (contract) => {
     const method = contract.method.toLowerCase() as 'get' | 'post' | 'head';
     const req = request(app)[method](contract.url).set(contract.headers ?? {});
@@ -50,13 +60,20 @@ function world(testCase: ContractCase): ContractWorld {
     const res = await (contract.body === undefined ? req : req.send(contract.body));
     return toReply(res.status, res.headers, res.text ?? '');
   };
-  return { runner, logRepo, analysisRepo, llm, send };
+  return { world: { runner, logRepo, llm, send }, close: () => runtime.close() };
 }
 
-async function record(buildWorld: (testCase: ContractCase) => ContractWorld): Promise<string> {
+async function record(): Promise<string> {
   const recorded: Record<string, ContractReply> = {};
   for (const testCase of CONTRACT_CASES) {
-    recorded[testCase.name] = await testCase.run(buildWorld(testCase));
+    const { world, close } = await buildWorld(testCase);
+    try {
+      recorded[testCase.name] = await testCase.run(world);
+    } finally {
+      // A case may leave an analysis hanging: close it before the next case empties the database.
+      await close();
+      vi.restoreAllMocks();
+    }
   }
   expect(Object.keys(recorded)).toHaveLength(CONTRACT_CASES.length);
   return `${JSON.stringify(recorded, null, 2)}\n`;
@@ -64,6 +81,6 @@ async function record(buildWorld: (testCase: ContractCase) => ContractWorld): Pr
 
 describe('HTTP contract', () => {
   it('the app matches the golden file', async () => {
-    await expect(await record(world)).toMatchFileSnapshot('./api-contract.golden.json');
+    await expect(await record()).toMatchFileSnapshot('./api-contract.golden.json');
   });
 });

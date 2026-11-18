@@ -1,39 +1,69 @@
 import request from 'supertest';
 import type { Express } from 'express';
-import { describe, expect, it } from 'vitest';
-import { createApp } from '@/app/create-app.js';
-import type { Service } from '@/models/service.js';
-import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
-import type { LogRepository } from '@/repositories/log.repository.js';
-import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
-import { createApiRoutes } from '@/routes/api.routes.js';
-import { LogsService } from '@/services/logs.service.js';
-import pino from 'pino';
-import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
+import type { Runtime } from '@/composition/create-runtime.js';
+import type { Log } from '@/models/log.js';
+import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
+import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
+import { okJson, ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';
+import { makeLog, makeService } from '@tests/support/fixtures.js';
+import { insertLogs, resetDatabase } from '@tests/support/integration/database.js';
+import { buildIntegrationRuntime } from '@tests/support/integration/integration-app.js';
+
+const prisma = createPrismaClient(inject('databaseUrl'));
+const logRepo = new PrismaLogRepository(prisma);
 
 const ID = '0192f1c0-0000-7000-8000-000000000001';
 const NOW = new Date('2026-11-03T12:00:00.000Z');
-const A: Service = { id: 1, name: 'a', description: null, apiKey: 'k-a', isActive: true };
-const B: Service = { id: 2, name: 'b', description: null, apiKey: 'k-b', isActive: true };
-const OFF: Service = { id: 3, name: 'off', description: null, apiKey: 'k-off', isActive: false };
 const keyA = { 'x-api-key': 'k-a' };
 const INTERNAL = { error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } };
 
-function build(repo: LogRepository = new InMemoryLogRepository()): Express {
-  const serviceRepo = new InMemoryServiceRepository([A, B, OFF]);
-  const logs = new LogsService({ logRepo: repo, serviceRepo, newId: () => ID });
-  // Only the logs routes are exercised: the analysis service is never reached.
-  const routes = createApiRoutes({ logs, analysis: undefined as never, checkDatabase: () => Promise.resolve(), now: () => NOW });
-  return createApp({ logger: pino({ level: 'silent' }), serviceRepo, routes });
+const runtimes: Runtime[] = [];
+
+function build(): Express {
+  const runtime = buildIntegrationRuntime({
+    prisma,
+    llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })),
+    logRepo,
+    newId: () => ID,
+    now: () => NOW,
+  });
+  runtimes.push(runtime);
+  return runtime.app;
 }
 
-async function seeded(logs: ReturnType<typeof makeListLog>[]): Promise<Express> {
-  const repo = new InMemoryLogRepository();
-  for (const log of logs) await repo.create(log);
-  return build(repo);
+/** Replaces the stored logs with the given ones and returns a fresh app. */
+async function seeded(logs: Log[]): Promise<Express> {
+  await prisma.log.deleteMany();
+  await insertLogs(prisma, logs);
+  return build();
 }
 
-describe('POST /api/logs', () => {
+beforeAll(async () => {
+  await prisma.$connect();
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+beforeEach(async () => {
+  vi.restoreAllMocks();
+  await resetDatabase(prisma);
+  await prisma.service.createMany({
+    data: [
+      makeService(1, { name: 'a', apiKey: 'k-a' }),
+      makeService(2, { name: 'b', apiKey: 'k-b' }),
+      makeService(3, { name: 'off', apiKey: 'k-off', isActive: false }),
+    ],
+  });
+});
+
+afterEach(async () => {
+  await Promise.all(runtimes.splice(0).map((runtime) => runtime.close()));
+});
+
+describe('POST /api/logs against Postgres', () => {
   const valid = { level: 'ERROR', timestamp: '2026-11-03T10:00:00.123Z', message: 'boom' };
   const post = (app: Express, payload: object, h: Record<string, string> = keyA) => request(app).post('/api/logs').set(h).send(payload);
 
@@ -64,18 +94,16 @@ describe('POST /api/logs', () => {
   });
 
   it('a body serviceId is rejected and nothing is persisted', async () => {
-    const repo = new InMemoryLogRepository();
-    const res = await post(build(repo), { ...valid, serviceId: 9 });
+    const res = await post(build(), { ...valid, serviceId: 9 });
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: { code: 'VALIDATION_ERROR' } });
-    expect(repo.logs).toHaveLength(0);
+    expect(await prisma.log.count()).toBe(0);
   });
 
   it('a missing key with an invalid body is 401, not 400', async () => {
-    const repo = new InMemoryLogRepository();
-    const res = await post(build(repo), { nope: true }, {});
+    const res = await post(build(), { nope: true }, {});
     expect(res.status).toBe(401);
-    expect(repo.logs).toHaveLength(0);
+    expect(await prisma.log.count()).toBe(0);
   });
 
   it('inactive and unknown keys give an identical 401', async () => {
@@ -93,11 +121,10 @@ describe('POST /api/logs', () => {
   });
 
   it('two invalid fields give two details and persist nothing', async () => {
-    const repo = new InMemoryLogRepository();
-    const res = await post(build(repo), { ...valid, level: 'x', message: '' });
+    const res = await post(build(), { ...valid, level: 'x', message: '' });
     expect(res.status).toBe(400);
     expect((res.body as { error: { details: unknown[] } }).error.details).toHaveLength(2);
-    expect(repo.logs).toHaveLength(0);
+    expect(await prisma.log.count()).toBe(0);
   });
 
   it('malformed JSON is a 400 VALIDATION_ERROR', async () => {
@@ -113,21 +140,17 @@ describe('POST /api/logs', () => {
   });
 
   it('500 on repository failure without leaking internals', async () => {
-    const res = await post(
-      build({
-        create: () => Promise.reject(new Error('secret db detail')),
-        list: () => Promise.reject(new Error('not used')),
-        countByServiceAndLevel: () => Promise.reject(new Error('not used')),
-      }),
-      valid,
-    );
+    vi.spyOn(logRepo, 'create').mockRejectedValue(new Error('secret db detail'));
+
+    const res = await post(build(), valid);
+
     expect(res.status).toBe(500);
     expect(res.body).toEqual(INTERNAL);
     expect(res.text).not.toContain('secret');
   });
 });
 
-describe('GET /api/logs', () => {
+describe('GET /api/logs against Postgres', () => {
   interface Page {
     items: { id: string; serviceId: number; level: string }[];
     nextCursor: string | null;
@@ -136,7 +159,7 @@ describe('GET /api/logs', () => {
   const get = (app: Express, url: string, h: Record<string, string> = keyA) => request(app).get(url).set(h);
   const page = (res: { body: unknown }) => res.body as Page;
   const logsFor = (count: number) =>
-    Array.from({ length: count }, (_, i) => makeListLog(i + 1, { serviceId: (i + 1) % 2 ? 1 : 2, level: (i + 1) % 2 ? 'ERROR' : 'FATAL' }));
+    Array.from({ length: count }, (_, i) => makeLog(i + 1, { serviceId: (i + 1) % 2 ? 1 : 2, level: (i + 1) % 2 ? 'ERROR' : 'FATAL' }));
 
   it('200 with exactly items/nextCursor/hasMore and the seven camelCase item keys', async () => {
     const res = await get(await seeded(logsFor(1)), '/api/logs');
@@ -225,26 +248,26 @@ describe('GET /api/logs', () => {
   });
 
   it('500 on repository failure without leaking internals', async () => {
-    const repo = new InMemoryLogRepository();
-    repo.list = () => Promise.reject(new Error('secret db detail'));
-    const res = await get(build(repo), '/api/logs');
+    vi.spyOn(logRepo, 'list').mockRejectedValue(new Error('secret db detail'));
+
+    const res = await get(build(), '/api/logs');
     expect(res.status).toBe(500);
     expect(res.body).toEqual(INTERNAL);
   });
 });
 
-describe('GET /api/logs/stats', () => {
+describe('GET /api/logs/stats against Postgres', () => {
   interface Stats {
     total: number;
     groups: { service: { id: number; name: string }; level: string; count: number }[];
   }
   const get = (app: Express, url: string, h: Record<string, string> = keyA) => request(app).get(url).set(h);
   const mixed = () => [
-    makeListLog(1, { serviceId: 1, level: 'ERROR' }),
-    makeListLog(2, { serviceId: 1, level: 'ERROR' }),
-    makeListLog(3, { serviceId: 1, level: 'INFO' }),
-    makeListLog(4, { serviceId: 2, level: 'ERROR', traceId: 't' }),
-    makeListLog(5, { serviceId: 3, level: 'FATAL' }),
+    makeLog(1, { serviceId: 1, level: 'ERROR' }),
+    makeLog(2, { serviceId: 1, level: 'ERROR' }),
+    makeLog(3, { serviceId: 1, level: 'INFO' }),
+    makeLog(4, { serviceId: 2, level: 'ERROR', traceId: 't' }),
+    makeLog(5, { serviceId: 3, level: 'FATAL' }),
   ];
 
   it('200 with exactly total/groups over every service, inactive included, in order', async () => {
@@ -308,17 +331,17 @@ describe('GET /api/logs/stats', () => {
   });
 
   it('500 on repository failure without leaking internals', async () => {
-    const repo = new InMemoryLogRepository();
-    repo.countByServiceAndLevel = () => Promise.reject(new Error('secret db detail'));
-    const res = await get(build(repo), '/api/logs/stats');
+    vi.spyOn(logRepo, 'countByServiceAndLevel').mockRejectedValue(new Error('secret db detail'));
+
+    const res = await get(build(), '/api/logs/stats');
     expect(res.status).toBe(500);
     expect(res.body).toEqual(INTERNAL);
   });
 
   it('500 without leaking internals when a group references a service missing from the service repository', async () => {
-    const repo = new InMemoryLogRepository();
-    repo.countByServiceAndLevel = () => Promise.resolve([{ serviceId: 99, level: 'ERROR', count: 1 }]);
-    const res = await get(build(repo), '/api/logs/stats');
+    vi.spyOn(logRepo, 'countByServiceAndLevel').mockResolvedValue([{ serviceId: 99, level: 'ERROR', count: 1 }]);
+
+    const res = await get(build(), '/api/logs/stats');
     expect(res.status).toBe(500);
     expect(res.body).toEqual(INTERNAL);
     expect(res.text).not.toContain('service 99');

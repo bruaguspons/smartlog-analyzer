@@ -1,13 +1,31 @@
-import { describe, expect, it, vi, type Mock } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi, type Mock } from 'vitest';
+import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
 import { AnalysisRunner, recoverInterrupted } from '@/services/analysis-runner.js';
 import type { AnalysisJob } from '@/services/process-analysis.js';
-import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
-import { analysisId, logId } from '@tests/support/contracts/analysis-repository-contract.js';
-import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
+import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';
+import { analysisId, logId, makeLog } from '@tests/support/fixtures.js';
+import { insertLogs, resetDatabaseWithService } from '@tests/support/integration/database.js';
+
+const prisma = createPrismaClient(inject('databaseUrl'));
+const repo = new PrismaAnalysisRepository(prisma);
+
+beforeAll(async () => {
+  await prisma.$connect();
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+beforeEach(async () => {
+  vi.restoreAllMocks();
+  await resetDatabaseWithService(prisma);
+  await insertLogs(prisma, logs);
+});
 
 const CREATED_AT = new Date('2026-11-04T10:00:00.000Z');
-const logs = [makeListLog(1), makeListLog(2)];
+const logs = [makeLog(1), makeLog(2)];
 const jobOf = (n: number): AnalysisJob => ({ analysisId: analysisId(n), logs, createdAt: CREATED_AT });
 const ok = okJson({ summary: 'Summary', findings: [] });
 
@@ -18,7 +36,6 @@ function silentLog(): Record<'info' | 'warn' | 'error', LogFn> {
 }
 
 async function setup(llm: ScriptedLlmClient, maxRetries = 3) {
-  const repo = new InMemoryAnalysisRepository();
   await repo.createProcessing(
     { id: analysisId(1), provider: llm.provider, model: llm.model, createdAt: CREATED_AT },
     logs.map((l) => l.id),
@@ -27,7 +44,7 @@ async function setup(llm: ScriptedLlmClient, maxRetries = 3) {
   return { repo, runner, log: silentLog() };
 }
 
-describe('AnalysisRunner', () => {
+describe('AnalysisRunner against Postgres', () => {
   it('runs a started job to COMPLETED; idle() resolves when it is done', async () => {
     const { repo, runner, log } = await setup(new ScriptedLlmClient(ok));
 
@@ -170,7 +187,6 @@ describe('AnalysisRunner', () => {
 
 describe('recoverInterrupted', () => {
   it('leftover PROCESSING rows become FAILED/INTERRUPTED and the next analysis can start', async () => {
-    const repo = new InMemoryAnalysisRepository();
     const created = { provider: 'mock', model: 'mock', createdAt: new Date() };
     await repo.createProcessing({ id: analysisId(1), ...created }, [logId(1)]);
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -185,7 +201,7 @@ describe('recoverInterrupted', () => {
 
   it('does nothing and stays quiet when there is nothing to recover', async () => {
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    expect(await recoverInterrupted(new InMemoryAnalysisRepository(), log)).toEqual([]);
+    expect(await recoverInterrupted(repo, log)).toEqual([]);
     expect(log.warn).not.toHaveBeenCalled();
   });
 });

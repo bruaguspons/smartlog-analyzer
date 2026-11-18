@@ -1,22 +1,41 @@
 import type { RequestHandler } from 'express';
 import request from 'supertest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { Service } from '@/models/service.js';
-import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
+import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
 import type { ServiceRepository } from '@/repositories/service.repository.js';
 import { requireApiKey } from '@/middlewares/require-api-key.js';
 import type { RouteDefinition } from '@/routes/mount-routes.js';
+import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { buildTestApp } from '@tests/support/apps/express-test-app.js';
+import { makeService } from '@tests/support/fixtures.js';
+import { resetDatabase } from '@tests/support/integration/database.js';
 
-const active: Service = { id: 7, name: 'svc', description: null, apiKey: 'k-active', isActive: true };
-const off: Service = { id: 8, name: 'off', description: null, apiKey: 'k-off', isActive: false };
+const prisma = createPrismaClient(inject('databaseUrl'));
+const active = makeService(7, { apiKey: 'k-active' });
+const off = makeService(8, { apiKey: 'k-off', isActive: false });
 
-function spiedRepo(services: Service[] = [active, off]) {
-  const inner = new InMemoryServiceRepository(services);
+/** The real repository over Postgres, with `findByApiKey` spied so a test can count lookups. */
+async function spiedRepo(services: Service[] = [active, off]) {
+  await resetDatabase(prisma);
+  await prisma.service.createMany({ data: services });
+  const inner = new PrismaServiceRepository(prisma);
   const findByApiKey = vi.fn((key: string) => inner.findByApiKey(key));
   return { repo: { findByApiKey, findNamesByIds: (ids: readonly number[]) => inner.findNamesByIds(ids) } satisfies ServiceRepository, findByApiKey };
 }
+
+beforeAll(async () => {
+  await prisma.$connect();
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+beforeEach(async () => {
+  await resetDatabase(prisma);
+});
 
 const handler = vi.fn<RequestHandler>((_req, res) => {
   res.json({ id: res.locals.service.id });
@@ -28,12 +47,12 @@ const routes: RouteDefinition[] = [
   { method: 'get', path: '/open', summary: 'public', tags: [], public: true, responses: { 200: z.object({}) }, handler: (_req, res) => void res.json({ ok: true }) },
 ];
 
-describe('requireApiKey', () => {
+describe('requireApiKey against Postgres', () => {
   const build = (repo: ServiceRepository, logStream?: { write(m: string): void }) =>
     buildTestApp({ serviceRepo: repo, routes, ...(logStream && { logStream }) });
 
   it('a valid key puts the service in res.locals; the repository is queried once', async () => {
-    const { repo, findByApiKey } = spiedRepo();
+    const { repo, findByApiKey } = await spiedRepo();
     handler.mockClear();
     const res = await request(build(repo)).get('/api/p').set('x-api-key', 'k-active');
     expect(res.status).toBe(200);
@@ -42,7 +61,7 @@ describe('requireApiKey', () => {
   });
 
   it('missing, empty, too long, unknown and inactive give an identical 401', async () => {
-    const { repo } = spiedRepo();
+    const { repo } = await spiedRepo();
     handler.mockClear();
     const app = build(repo);
     const responses = [
@@ -65,13 +84,13 @@ describe('requireApiKey', () => {
   });
 
   it('a key of exactly 256 characters is still looked up', async () => {
-    const { repo, findByApiKey } = spiedRepo();
+    const { repo, findByApiKey } = await spiedRepo();
     await request(build(repo)).get('/api/p').set('x-api-key', 'k'.repeat(256));
     expect(findByApiKey).toHaveBeenCalledTimes(1);
   });
 
   it('an unknown /api route without key is 404 and the repository is not queried', async () => {
-    const { repo, findByApiKey } = spiedRepo();
+    const { repo, findByApiKey } = await spiedRepo();
     const res = await request(build(repo)).get('/api/nope');
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ error: { code: 'NOT_FOUND' } });
@@ -79,25 +98,25 @@ describe('requireApiKey', () => {
   });
 
   it('an unknown /api route with a valid key is 404 too', async () => {
-    const { repo } = spiedRepo();
+    const { repo } = await spiedRepo();
     const res = await request(build(repo)).get('/api/nope').set('x-api-key', 'k-active');
     expect(res.status).toBe(404);
   });
 
   it('a public route needs no key and skips the repository', async () => {
-    const { repo, findByApiKey } = spiedRepo();
+    const { repo, findByApiKey } = await spiedRepo();
     const res = await request(build(repo)).get('/api/open');
     expect(res.status).toBe(200);
     expect(findByApiKey).not.toHaveBeenCalled();
   });
 
   it('auth precedes body validation', async () => {
-    const res = await request(build(new InMemoryServiceRepository())).post('/api/v').send({});
+    const res = await request(build((await spiedRepo([])).repo)).post('/api/v').send({});
     expect(res.status).toBe(401);
   });
 
   it('an empty repository gives 401 for any key', async () => {
-    const res = await request(build(new InMemoryServiceRepository())).get('/api/p').set('x-api-key', 'k-active');
+    const res = await request(build((await spiedRepo([])).repo)).get('/api/p').set('x-api-key', 'k-active');
     expect(res.status).toBe(401);
   });
 
@@ -108,7 +127,7 @@ describe('requireApiKey', () => {
   it('the API key never reaches the logs', async () => {
     const lines: string[] = [];
     const secret = 'k-secret-should-not-be-logged';
-    const app = build(new InMemoryServiceRepository([{ ...active, apiKey: secret }]), { write: (msg) => lines.push(msg) });
+    const app = build((await spiedRepo([{ ...active, apiKey: secret }])).repo, { write: (msg) => lines.push(msg) });
     const ok = await request(app).get('/api/p').set('x-api-key', secret);
     const denied = await request(app).get('/api/p').set('x-api-key', `${secret}-x`);
     expect([ok.status, denied.status]).toEqual([200, 401]);

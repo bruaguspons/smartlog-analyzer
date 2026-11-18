@@ -3,7 +3,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, i
 import type { Runtime } from '@/composition/create-runtime.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { okJson, ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';
-import { authHeaders, buildIntegrationRuntime, resetDatabase } from '@tests/support/integration/integration-app.js';
+import { resetDatabaseWithService } from '@tests/support/integration/database.js';
+import { authHeaders, buildIntegrationRuntime } from '@tests/support/integration/integration-app.js';
 
 /**
  * Inputs Postgres cannot store (an Int4-overflowing serviceId, NUL in text or jsonb) are rejected at
@@ -25,7 +26,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await resetDatabase(prisma);
+  await resetDatabaseWithService(prisma);
   runtime = buildIntegrationRuntime({ prisma, llm: new ScriptedLlmClient(okJson({ summary: 's', findings: [] })) });
 });
 

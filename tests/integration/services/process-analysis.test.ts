@@ -1,14 +1,32 @@
-import { describe, expect, it, vi, type Mock } from 'vitest';
-import { processAnalysis, type AnalysisJob } from '@/services/process-analysis.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, inject, it, vi, type Mock } from 'vitest';
 import { LlmError } from '@/llm/llm-client.js';
-import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
-import { analysisId } from '@tests/support/contracts/analysis-repository-contract.js';
-import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
+import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
+import { processAnalysis, type AnalysisJob } from '@/services/process-analysis.js';
+import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';
+import { analysisId, makeLog } from '@tests/support/fixtures.js';
+import { insertLogs, resetDatabaseWithService } from '@tests/support/integration/database.js';
+
+const prisma = createPrismaClient(inject('databaseUrl'));
+const repo = new PrismaAnalysisRepository(prisma);
+
+beforeAll(async () => {
+  await prisma.$connect();
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+beforeEach(async () => {
+  vi.restoreAllMocks();
+  await resetDatabaseWithService(prisma);
+  await insertLogs(prisma, logs);
+});
 
 const CREATED_AT = new Date('2026-11-04T10:00:00.000Z');
 const FINISHED_AT = new Date('2026-11-04T10:00:02.500Z');
-const logs = [makeListLog(1), makeListLog(2), makeListLog(3)];
+const logs = [makeLog(1), makeLog(2), makeLog(3)];
 const job: AnalysisJob = { analysisId: analysisId(1), logs, createdAt: CREATED_AT };
 
 const finding = (overrides: Record<string, unknown> = {}) => ({
@@ -27,7 +45,6 @@ function silentLog(): Record<'info' | 'warn' | 'error', LogFn> {
 }
 
 async function setup(llm: ScriptedLlmClient, maxRetries = 0) {
-  const repo = new InMemoryAnalysisRepository();
   await repo.createProcessing(
     { id: job.analysisId, provider: llm.provider, model: llm.model, createdAt: CREATED_AT },
     logs.map((l) => l.id),
@@ -38,7 +55,7 @@ async function setup(llm: ScriptedLlmClient, maxRetries = 0) {
   return { repo, log, run, fail: vi.spyOn(repo, 'fail'), complete: vi.spyOn(repo, 'complete') };
 }
 
-describe('processAnalysis', () => {
+describe('processAnalysis against Postgres', () => {
   it('a valid response completes the analysis with findings mapped to log ids', async () => {
     const llm = new ScriptedLlmClient(okJson({ summary: 'Summary', findings: [finding()] }, { prompt: 11, completion: 7 }));
     const { repo, run, complete } = await setup(llm);

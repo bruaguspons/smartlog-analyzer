@@ -5,9 +5,10 @@ import { recoverInterrupted } from '@/services/analysis-runner.js';
 import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
 import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
-import { analysisId, logId } from '@tests/support/contracts/analysis-repository-contract.js';
+import { analysisId, logId } from '@tests/support/fixtures.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
-import { authHeaders as headers, buildIntegrationRuntime, resetDatabase } from '@tests/support/integration/integration-app.js';
+import { resetDatabaseWithService } from '@tests/support/integration/database.js';
+import { authHeaders as headers, buildIntegrationRuntime } from '@tests/support/integration/integration-app.js';
 
 const prisma = createPrismaClient(inject('databaseUrl'));
 const analysisRepo = new PrismaAnalysisRepository(prisma);
@@ -42,7 +43,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await resetDatabase(prisma);
+  await resetDatabaseWithService(prisma);
   await prisma.log.createMany({
     data: [1, 2, 3].map((n) => ({
       id: logId(n),

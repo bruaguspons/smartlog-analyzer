@@ -15,7 +15,7 @@ import { AnalysisService } from '@/services/analysis.service.js';
 import { LogsService } from '@/services/logs.service.js';
 import type { Config } from '@/shared/config/load-config.js';
 
-/** Everything the runtime needs from the outside world; tests inject in-memory fakes. */
+/** Everything the runtime needs from the outside world; tests inject Prisma repositories over a test database and a scripted LLM. */
 export interface RuntimeDeps {
   serviceRepo: ServiceRepository;
   logRepo: LogRepository;

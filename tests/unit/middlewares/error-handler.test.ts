@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { ResponseValidationError } from '@/controllers/request-io.js';
 import { sendJson } from '@/controllers/request-io.js';
 import { errorHandler, toErrorResponse } from '@/middlewares/error-handler.js';
-import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
 import type { RouteDefinition } from '@/routes/mount-routes.js';
 import { AppError } from '@/shared/errors.js';
 import { buildTestApp } from '@tests/support/apps/express-test-app.js';
@@ -71,7 +70,7 @@ describe('error middleware', () => {
     ...extra,
   });
   const build = (routes: RouteDefinition[], logStream?: { write(m: string): void }) =>
-    buildTestApp({ serviceRepo: new InMemoryServiceRepository(), routes, ...(logStream && { logStream }) });
+    buildTestApp({ routes, ...(logStream && { logStream }) });
 
   const level = (lines: string[], wanted: number) =>
     lines.map((l) => JSON.parse(l) as { level: number; err?: { message: string; stack: string } }).find((l) => l.level === wanted);
