@@ -116,10 +116,10 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
 ### Node + TypeScript + Express 5
 
 - **Descartado:** Fastify, Express 4, NestJS.
-- **Por qué:** Express es el framework que cualquier revisor ya conoce y su flujo se lee de arriba abajo: la tabla de rutas, el middleware y el controlador. Express 5 propaga a `next` los errores de los handlers async, así que no hace falta una librería extra para eso. Con tres recursos y seis rutas, la estructura de Fastify (plugins encapsulados, type provider, hooks) agregaba más indirección que valor.
+- **Por qué:** Express es el framework que cualquier revisor ya conoce y su flujo se lee de arriba abajo: el router, el middleware y el controlador. Express 5 propaga a `next` los errores de los handlers async, así que no hace falta una librería extra para eso. Con tres recursos y seis rutas, la estructura de Fastify (plugins encapsulados, type provider, hooks) agregaba más indirección que valor.
 - **Qué se pierde y cómo se compensa:**
   - Serialización por esquema integrada: cada controlador pasa su respuesta por el esquema zod de respuesta (`sendJson`), que descarta claves desconocidas y evita filtrar campos como `apiKey` o `raw_response`. Si la respuesta no cumple el esquema, es un `500` registrado.
-  - Encapsulación de plugins: la autenticación y el parseo del body se aplican por ruta desde la tabla de rutas (ver [Autenticación y parseo por ruta](#autenticación-y-parseo-por-ruta)), no por scope.
+  - Encapsulación de plugins: la autenticación y el parseo del body se aplican por ruta en cada router (ver [Autenticación y parseo por ruta](#autenticación-y-parseo-por-ruta)), no por scope.
   - `app.inject()`: los tests usan `supertest` sobre la app (ver [Cómo se prueba](#cómo-se-prueba)).
 - **Descartado:**
   - Fastify: rinde más por request y trae validación y serialización integradas, pero a esta escala el rendimiento no pesa y la indirección sí.
@@ -144,7 +144,7 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
 - **Descartado:** procesamiento síncrono; cola externa (RabbitMQ, BullMQ + Redis).
 - **Por qué:** una llamada al LLM puede tardar decenas de segundos y no debería mantener abierto el request. `POST` responde `202` con el id y el cliente consulta el estado. Una cola externa daría reintentos y durabilidad, pero suma infraestructura que no se justifica en el prototipo.
 - **Consecuencias:**
-  - Cierre ordenado: el ejecutor lleva el registro de los análisis en curso. Al recibir `SIGTERM`, aborta cada llamada al LLM (sin más reintentos) y espera a que cada análisis quede en `FAILED` con `error_code = INTERRUPTED`; recién entonces se cierra el pool de la base. La raíz de composición (`createRuntime` en `src/composition/create-runtime.ts`) fija ese orden en un único `close()` idempotente: primero `server.close()`, luego `runner.shutdown()` y al final la desconexión de la base. Cada paso va en un `try/catch` con log, así que una falla no impide los siguientes.
+  - Cierre ordenado: el ejecutor lleva el registro de los análisis en curso. Al recibir `SIGTERM`, aborta cada llamada al LLM (sin más reintentos) y espera a que cada análisis quede en `FAILED` con `error_code = INTERRUPTED`; recién entonces se cierra el pool de la base. `src/server.ts` fija ese orden dentro del callback de `close-with-grace`: primero `server.close()`, luego `analysisRunner.shutdown()` y al final la desconexión de la base. Cada paso va en su propio `try/catch` con log, así que una falla no impide los siguientes, y `close-with-grace` ejecuta el callback una sola vez aunque llegue una segunda señal (solo la registra). Ambas garantías salen de la estructura del código y no tienen un test unitario propio; `tests/integration/server.test.ts` levanta el servidor real en un proceso aparte y verifica el orden de arranque, los códigos de salida y el cierre con `SIGTERM`.
   - Caídas: si el proceso muere sin pasar por el cierre ordenado, esos trabajos se pierden. Al arrancar, y antes de aceptar requests, los análisis que quedaron en `PROCESSING` se marcan `FAILED` con `INTERRUPTED`. Así ninguno queda colgado bloqueando nuevos análisis (ver [un solo análisis en curso](#un-solo-análisis-en-curso-a-la-vez)).
   - Escrituras condicionales: toda transición a un estado final es un compare-and-set (`WHERE status = 'PROCESSING'`), así que si compiten el cierre, la recuperación y el ejecutor, gana la primera escritura.
 
@@ -230,7 +230,7 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
   - Una base de test dentro del compose: obliga a levantarla antes de correr los tests y comparte estado entre corridas.
   - Jest en lugar de Vitest: Vitest tiene soporte nativo de TypeScript y ESM, sin configuración extra de transpilación.
 - **Por qué:** Testcontainers levanta un Postgres descartable desde el propio test, así que `npm run test:integration` funciona sin pasos previos y cada corrida empieza con una base limpia. `npm test` corre solo los tests unitarios y no necesita Docker.
-- **Detalle:** la app completa se ejercita con `supertest` y la misma raíz de composición que el servidor (`createRuntime`) y con un cliente de LLM programable (`ScriptedLlmClient`) que fija la respuesta de cada intento.
+- **Detalle:** la app real (`src/app.ts`) se ejercita con `supertest` y con un cliente de LLM programable (`ScriptedLlmClient`) que reemplaza al módulo `src/llm/llm.ts` y fija la respuesta de cada intento. Además, un test arranca `src/server.ts` en un proceso aparte contra la misma base.
 - **Consecuencias:** la primera corrida de integración es más lenta porque descarga la imagen de Postgres. En CI sirve cualquier runner con Docker.
 
 ### Un solo análisis en curso a la vez
@@ -259,7 +259,7 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
 
 ### Librerías del ecosistema Express: adoptadas y descartadas
 
-- **Adoptadas:** `pino-http` (log por request con el `x-request-id` del cliente o un UUID), `@asteasolutions/zod-to-openapi` y `swagger-ui-express` (OpenAPI en `/docs`, generado desde los esquemas zod y la misma tabla de rutas que se monta, así que rutas y documento no se desincronizan) y `close-with-grace` (apagado ordenado ante señales y errores no capturados, con timeout forzado de 8 s).
+- **Adoptadas:** `pino-http` (log por request con el `x-request-id` del cliente o un UUID), `@asteasolutions/zod-to-openapi` y `swagger-ui-express` (OpenAPI en `/docs`, generado desde los esquemas zod; cada router registra su documentación OpenAPI junto a sus rutas, así que ambas viven en el mismo archivo y no se desincronizan) y `close-with-grace` (apagado ordenado ante señales y errores no capturados, con timeout forzado de 8 s).
 - **Esquemas recursivos en OpenAPI:** el `metadata` JSON es un esquema recursivo; se registra con un id (`JsonValue`) para que se publique como componente. Sin él, el documento queda con referencias que no resuelven y `/docs` falla.
 - **Documento OpenAPI:** se sirve en `/docs` (interfaz) y `/docs/json`. No hay `/docs/yaml`.
 - **Descartadas**, cada una por una razón concreta:
@@ -272,7 +272,7 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
 
 ### Autenticación y parseo por ruta
 
-El middleware de `X-API-Key` y el parseo del body se aplican ruta por ruta desde la tabla de rutas (`src/routes/api.routes.ts`); solo `GET /api/health` está marcada como pública. La cadena de cada ruta es: autenticación, parseo de JSON (solo si tiene body) y controlador.
+El middleware de `X-API-Key` y el parseo del body se aplican ruta por ruta en los routers de `src/routes/` (`logs.routes.ts`, `analysis.routes.ts`, `health.routes.ts`); solo `GET /api/health` es pública. La cadena de cada ruta es: autenticación, parseo de JSON (solo si tiene body) y controlador.
 
 - **Descartado:** `app.use('/api', auth)` o autenticar a nivel del router, y un `express.json()` global. Un middleware de router convertiría una ruta desconocida bajo `/api` en `401` en lugar de `404`, y un parseo global correría antes de autenticar, con lo que un body inválido o demasiado grande ganaría al `401`.
 - **Consecuencias:** una ruta desconocida responde `404` sin autenticar, y la autenticación siempre precede a la validación del body (`401` antes que `400`, `413` o `415`). Lo que se monta fuera de `/api` (`/docs`) es público.
@@ -283,26 +283,37 @@ El middleware de `X-API-Key` y el parseo del body se aplican ruta por ruta desde
 - **Descartado, `snake_case`:** lo recomiendan algunas guías de API y aparece en el legado de OpenTelemetry (`trace_id`). Obliga a mapear nombres en cada request y response, y mezclar ambas convenciones sería peor que cualquiera de las dos.
 - **Consecuencia:** el body de `POST /api/logs` es estricto. Un `trace_id` o un `serviceId` en el body se rechaza con `400`.
 
+### Módulos singleton en lugar de inyección de dependencias
+
+- **Decisión:** `logsService`, `analysisService`, los repositorios, `llmClient` (`src/llm/llm.ts`), `config` y `prisma` son instancias únicas creadas al importar el módulo. Cada archivo importa lo que usa, igual que en una app Express convencional, y no hay una función que arme el grafo de dependencias.
+- **Descartado:** inyección explícita de dependencias, con `createApp(deps)` y una raíz de composición (`createRuntime`) que cableaba servicios, ejecutor y servidor y cerraba todo en orden. Daba repositorios en memoria y un test de contrato sin base de datos, y las dependencias de cada pieza se leían en su firma.
+- **Por qué:** para quien revisa el código pesó más la legibilidad: seguir un request pasaba por fábricas, interfaces y un cableado que no existe en una API Express típica, y el costo no se justificaba con tres recursos. Se prefirió un código tan llano como el de cualquier app Express.
+- **Consecuencias:**
+  - Los tests no inyectan dobles: los que tocan datos corren contra Postgres (ver [Cómo se prueba](#cómo-se-prueba)) y los de LLM reemplazan el módulo `src/llm/llm.ts` con `vi.mock`.
+  - Los repositorios en memoria y sus contratos compartidos desaparecieron; los unitarios cubren solo módulos puros.
+  - El test de contrato fija los ids y el reloj con `vi.mock('node:crypto')` y un `Date` falso, porque ya no puede inyectarlos.
+  - Importar un módulo con cableado valida la configuración (`DATABASE_URL`), así que no se puede importar desde un test unitario sin una base.
+
 ### Estructura del proyecto: capas por tipo de archivo (routes, controllers, services, repositories)
 
 - **Decisión:** el código está organizado en carpetas planas por capa, con un archivo por recurso en cada una:
 
   | Carpeta                 | Contenido                                                                                                                           |
   | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-  | `src/routes/`           | Tabla de rutas (`api.routes.ts`) y su montaje en Express (`mount-routes.ts`).                                                       |
+  | `src/routes/`           | Un router por recurso con su cadena de middlewares y su documentación OpenAPI al lado, y `openapi.ts` que arma el documento.        |
   | `src/controllers/`      | Un controlador por recurso (`logs`, `analysis`, `health`) y `request-io.ts` (`parseRequest`, `sendJson`).                           |
   | `src/middlewares/`      | Autenticación por API key, parseo de JSON y manejo de errores.                                                                      |
   | `src/schemas/`          | Esquemas zod de entrada y salida de la API, y sus helpers.                                                                          |
-  | `src/services/`         | `LogsService`, `AnalysisService`, el ejecutor de análisis (`AnalysisRunner`) y `process-analysis`. No conocen Express.              |
-  | `src/repositories/`     | Una interfaz por entidad, su implementación Prisma y una en memoria para los tests unitarios. No conocen Express ni los servicios.  |
+  | `src/services/`         | `logsService`, `analysisService`, el ejecutor de análisis (`AnalysisRunner`) y `process-analysis`. No conocen Express.                |
+  | `src/repositories/`     | Un archivo por entidad con las consultas Prisma. No conocen Express ni los servicios.                                                |
   | `src/models/`           | Tipos y constantes de las entidades (`Log`, `Analysis`, `Service`).                                                                 |
   | `src/llm/`              | `LlmClient`, clientes Gemini y mock, prompt, validación de la respuesta y política de reintentos.                                   |
   | `src/seed/`             | Código del seed.                                                                                                                    |
   | `src/shared/`           | Configuración, errores de la aplicación, cursor y cliente de Prisma.                                                                |
-  | `src/app/`              | `createApp` (ajustes de Express, logger, `/docs`, router y manejo de errores) y la generación del documento OpenAPI.                |
-  | `src/composition/`      | `createRuntime`, el cableado con Prisma, el arranque y el apagado.                                                                  |
+  | `src/app.ts`            | La app de Express: ajustes, logger, `/docs`, routers y manejo de errores. No abre ningún puerto.                                    |
+  | `src/server.ts`         | Punto de entrada: recuperación al arrancar, `listen` y cierre ordenado con `close-with-grace`.                                      |
 
-  Las dependencias van hacia abajo: controladores y rutas usan servicios; servicios usan interfaces de repositorio y modelos; los repositorios usan modelos. Servicios y repositorios no importan Express, ni controladores, rutas o middlewares, y los repositorios tampoco importan servicios. Se divide un archivo solo cuando lo comparte código de otra capa; si no, tipos y constantes viven en el archivo que los usa. Se prioriza la legibilidad por sobre un límite rígido de tamaño. Los tests replican el árbol de `src/` y los dobles de prueba viven en `tests/support/`.
+  Las dependencias van hacia abajo: controladores y rutas usan servicios; servicios usan interfaces de repositorio y modelos; los repositorios usan modelos. Servicios y repositorios no importan Express, ni controladores, rutas o middlewares, y los repositorios tampoco importan servicios. Se divide un archivo solo cuando lo comparte código de otra capa; si no, tipos y constantes viven en el archivo que los usa. Se prioriza la legibilidad por sobre un límite rígido de tamaño. Los servicios, repositorios, el cliente de LLM y el cliente de Prisma son módulos singleton que se importan directamente (ver [Módulos singleton en lugar de inyección de dependencias](#módulos-singleton-en-lugar-de-inyección-de-dependencias)). Los tests replican el árbol de `src/` y los dobles de prueba viven en `tests/support/`.
 - **Imports:** `@/` apunta a `src/` (y `@tests/` a `tests/`) mediante `paths` de TypeScript; en el build, `tsc-alias` los reescribe a rutas relativas, y Vitest y `tsx` los resuelven por su cuenta. Dentro de una misma carpeta se usa `./`; nunca `../`. No hay archivos `index.ts` que reexporten.
 - **Por qué:** quien ya conoce una API en capas encuentra cada cosa donde espera, y seguir un request es recorrer cuatro carpetas conocidas. Con tres recursos, cada archivo sigue siendo corto sin necesidad de más subdivisiones.
 - **Descartado:**
@@ -397,11 +408,16 @@ Códigos de falla persistidos en `analyses.error_code`:
 
 ### Cómo se prueba
 
-Los tests unitarios (`npm test`) no necesitan Docker: usan repositorios en memoria y `supertest` sobre la app de Express, sin abrir un puerto. Tres capas de tests los complementan:
+Hay dos grupos de tests, que replican el árbol de `src/`:
 
-- **Test de contrato:** `tests/unit/app/api-contract.test.ts` ejecuta una matriz de requests (éxitos, `401`, `404`, validación, JSON mal formado, `413`, `415`, `409`, `422`, `503`) y compara status, `content-type` y body con `tests/unit/app/api-contract.golden.json`. Cualquier cambio visible de la API aparece como diff en ese archivo. Se grabó antes de migrar de Fastify a Express y el cambio de framework no lo modificó.
-- **Contratos de repositorio:** la misma batería de casos (`tests/support/contracts/`) corre contra la implementación en memoria y, en los tests de integración, contra la de Prisma, para que no diverjan.
-- **Integración con Testcontainers:** ver [Tests de integración contra un Postgres real con Testcontainers](#tests-de-integración-contra-un-postgres-real-con-testcontainers).
+- **Unitarios (`npm test`):** solo módulos puros (esquemas, cursor, configuración, construcción del prompt, política de reintentos con timers falsos, normalización de la respuesta del LLM, middlewares y utilidades de controladores). No necesitan Docker ni `DATABASE_URL`: el proyecto de Vitest la deja vacía, así que importar por error un módulo con cableado falla en lugar de llegar a una base.
+- **Integración (`npm run test:integration`):** requiere Docker y concentra casi toda la cobertura HTTP. Usa un Postgres de Testcontainers con las migraciones reales y `supertest` sobre `src/app.ts`; ver [Tests de integración contra un Postgres real con Testcontainers](#tests-de-integración-contra-un-postgres-real-con-testcontainers).
+
+Tres piezas del grupo de integración merecen detalle:
+
+- **Test de contrato:** `tests/integration/api/api-contract.test.ts` ejecuta una matriz de requests (éxitos, `401`, `404`, validación, JSON mal formado, `413`, `415`, `409`, `422`, `503`) sobre Postgres y compara status, `content-type` y body con `tests/integration/api/api-contract.golden.json`. Los ids de `randomUUIDv7` y el reloj están fijos (`vi.mock('node:crypto')` y un `Date` falso) y el módulo del LLM está reemplazado por el cliente programable, así que la comparación es byte a byte. Cualquier cambio visible de la API aparece como diff en ese archivo. Se grabó antes de migrar de Fastify a Express y el cambio de framework no lo modificó.
+- **Servidor real:** `tests/integration/server.test.ts` lanza `src/server.ts` como proceso hijo y verifica el arranque, la salida con código 1 ante una falla y el cierre con `SIGTERM`.
+- **Repositorios y servicios:** se prueban contra Postgres, sin dobles en memoria.
 
 Los tres casos que pide el enunciado se cubren con el cliente programable y timers falsos, para que los tests de timeout y backoff no esperen en tiempo real:
 
@@ -442,6 +458,7 @@ La configuración se valida con zod al arrancar. Si falta algo obligatorio o tie
 | `LLM_MODEL`                                           | `gemini-3.6-flash` | Modelo de Gemini a usar.                                                      |
 | `LLM_TIMEOUT_MS`                                      | `30000`            | Timeout por intento.                                                          |
 | `LLM_MAX_RETRIES`                                     | `3`                | Reintentos ante errores transitorios (entero de 0 a 10; 0 = un solo intento). |
+| `LLM_MOCK_BEHAVIOR`                                   | `normal`           | Solo con `LLM_PROVIDER=mock`: `normal`, `invalid` (respuesta que no es JSON) o `timeout` (no responde hasta abortarse). Sirve para ver las fallas sin Gemini. |
 | `SEED_ON_START`                                       | `true`             | Ejecutar el seed idempotente al arrancar.                                     |
 | `LOG_LEVEL`                                           | `info`             | Nivel del log de la aplicación.                                               |
 

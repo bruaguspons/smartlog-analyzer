@@ -60,12 +60,12 @@ La documentación OpenAPI interactiva está en `/docs` (puerto 3000). Las rutas 
 
 ## Estructura
 
-API Express 5 en capas: `src/routes` (tabla de rutas) -> `src/controllers` -> `src/services` -> `src/repositories` (Prisma), con `src/middlewares`, `src/schemas` (zod), `src/models`, `src/llm`, `src/seed`, `src/shared` y `src/composition` (cableado y apagado). El detalle y las alternativas descartadas están en [Estructura del proyecto](ARCHITECTURE.md#estructura-del-proyecto-capas-por-tipo-de-archivo-routes-controllers-services-repositories).
+API Express 5 en capas: `src/routes` (un router por recurso, con su OpenAPI al lado) -> `src/controllers` -> `src/services` -> `src/repositories` (Prisma), con `src/middlewares`, `src/schemas` (zod), `src/models`, `src/llm`, `src/seed` y `src/shared`. `src/app.ts` arma la app de Express y `src/server.ts` es el punto de entrada (arranque y cierre ordenado). Los servicios y repositorios son módulos singleton, sin inyección de dependencias. El detalle y las alternativas descartadas están en [Estructura del proyecto](ARCHITECTURE.md#estructura-del-proyecto-capas-por-tipo-de-archivo-routes-controllers-services-repositories).
 
 ## Pruebas
 
-- `npm test`: tests unitarios, sin Docker, con `supertest` sobre la app. Incluyen un test de contrato (`tests/unit/app/api-contract.golden.json`) que fija las respuestas de la API.
-- `npm run test:integration`: Postgres real con Testcontainers (requiere Docker); aplica las migraciones y falla si difieren de `db/schema.prisma`.
+- `npm test`: tests unitarios de módulos puros (esquemas, cursor, configuración, prompt, reintentos, middlewares). No necesitan Docker ni `DATABASE_URL`.
+- `npm run test:integration`: Postgres real con Testcontainers (requiere Docker); aplica las migraciones y falla si difieren de `db/schema.prisma`. Concentra casi toda la cobertura HTTP: endpoints con `supertest`, el test de contrato (`tests/integration/api/api-contract.golden.json`, que fija las respuestas de la API) y un test que levanta `src/server.ts` como proceso aparte para verificar el arranque y el cierre.
 - `npm run lint` y `npm run typecheck`: análisis estático.
 
 ## Cómo se usó la IA
@@ -77,6 +77,10 @@ Claude Code fue el asistente durante todo el proyecto. El autor definió el alca
 La primera versión usaba Fastify con módulos hexagonales y una carpeta por caso de uso (unos 145 archivos). El autor decidió pasar a Express 5 con capas simples (routes, controllers, services, repositories) por legibilidad para quien revisa el código. La IA propuso el plan de migración por pasos, escribió el código bajo la dirección del autor y lo hizo en commits chicos.
 
 Para demostrar que la API no cambió, antes de tocar nada se grabó un test de contrato con la respuesta de cada caso (éxitos, errores, rutas desconocidas, bodies inválidos) y el nuevo código tuvo que reproducirlo sin cambios. Qué se descartó: una capa de compatibilidad para seguir usando `inject()` en los tests (se reescribieron con `supertest`) y un middleware de validación genérico que dejaba la entrada como `any` (cada controlador parsea con zod y obtiene tipos). `/docs/yaml` se eliminó y el documento `/docs/json` lo genera ahora otra librería, por lo que su contenido exacto cambió.
+
+### Simplificación a módulos singleton
+
+Después de la migración, el código seguía con inyección explícita de dependencias (`createApp(deps)`, una raíz de composición y repositorios en memoria). La IA analizó el costo y recomendó conservarla, por los tests unitarios sin base de datos y el cierre ordenado verificable con un test. El autor eligió lo contrario: que el código sea tan llano como el de una app Express convencional, con módulos singleton. La IA hizo el cambio por pasos, moviendo antes los tests de HTTP, servicios y repositorios a Postgres y reemplazando el cableado por `src/app.ts` y `src/server.ts`. Qué se descartó: conservar los repositorios en memoria como segunda implementación y un test unitario del cierre ordenado; a cambio, que cada paso falle de forma aislada y que una señal repetida no repita el cierre lo garantiza la estructura de `src/server.ts` y `close-with-grace`, y un test de integración levanta el servidor real. Se asumió el costo de que la mayoría de los tests de HTTP necesiten Docker.
 
 ## Trabajo a futuro
 
