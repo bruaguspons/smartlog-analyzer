@@ -1,7 +1,8 @@
 import type { Response } from 'express';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { parseRequest, RequestValidationError, ResponseValidationError, sendJson } from '@/controllers/request-io.js';
+import { parseRequest, sendJson } from '@/controllers/request-io.js';
+import { RequestValidationError, ResponseValidationError } from '@/shared/errors.js';
 
 describe('parseRequest', () => {
   const schema = z.strictObject({ level: z.enum(['INFO', 'ERROR']), limit: z.coerce.number().default(5) });

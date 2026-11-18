@@ -1,6 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
-import { ResponseValidationError } from '@/controllers/request-io.js';
-import { AppError, NotFoundError } from '@/shared/errors.js';
+import { AppError, NotFoundError, ResponseValidationError } from '@/shared/errors.js';
 import { parseJsonBody } from './parse-json-body.js';
 
 const INTERNAL_MESSAGE = 'Internal server error';
@@ -73,8 +72,11 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   const { statusCode, body } = toErrorResponse(err);
   if (err instanceof ResponseValidationError) {
     req.log.error({ err, issues: err.issues }, 'response serialization failed');
-  } else if (statusCode >= 500) req.log.error({ err }, 'unhandled error');
-  else req.log.info({ err }, 'request rejected');
+  } else if (statusCode >= 500) {
+    req.log.error({ err }, 'unhandled error');
+  } else {
+    req.log.info({ err }, 'request rejected');
+  }
   res.status(statusCode).json(body);
 };
 

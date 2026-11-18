@@ -2,11 +2,10 @@ import type { Request, RequestHandler, Response, Router } from 'express';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { ResponseValidationError } from '@/controllers/request-io.js';
 import { sendJson } from '@/controllers/request-io.js';
 import { errorHandler, toErrorResponse } from '@/middlewares/error-handler.js';
 import { parseJsonBody } from '@/middlewares/parse-json-body.js';
-import { AppError } from '@/shared/errors.js';
+import { AppError, ResponseValidationError } from '@/shared/errors.js';
 import { buildTestApp } from '@tests/support/apps/express-test-app.js';
 
 describe('toErrorResponse', () => {

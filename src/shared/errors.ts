@@ -1,3 +1,5 @@
+import type { z } from 'zod';
+
 /** Error with a stable, client-facing `code`; rendered as-is by the error handler. */
 export class AppError extends Error {
   readonly statusCode: number;
@@ -41,5 +43,31 @@ export class UnauthorizedError extends AppError {
 export class UnprocessableError extends AppError {
   constructor(code: string, message: string) {
     super(422, code, message);
+  }
+}
+
+export type RequestPart = 'body' | 'querystring' | 'params';
+
+/** 400 in the standard envelope; the message lists every issue, `details` has one item per issue. */
+export class RequestValidationError extends AppError {
+  constructor(part: RequestPart, issues: readonly z.core.$ZodIssue[]) {
+    const details = issues.map((issue) => ({
+      instancePath: `/${issue.path.join('/')}`,
+      keyword: issue.code,
+      message: issue.message,
+    }));
+    const message = details.map((d) => `${part}${d.instancePath} ${d.message}`).join(', ');
+    super(400, 'VALIDATION_ERROR', message, details);
+  }
+}
+
+/** A handler produced data its own response schema rejects: a bug, answered as a generic 500. */
+export class ResponseValidationError extends Error {
+  readonly issues: readonly z.core.$ZodIssue[];
+
+  constructor(issues: readonly z.core.$ZodIssue[]) {
+    super('response does not match its schema');
+    this.name = 'ResponseValidationError';
+    this.issues = issues;
   }
 }
