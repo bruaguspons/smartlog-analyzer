@@ -1,11 +1,18 @@
-import { callWithRetry, LlmCallFailure, type RetryDeps } from '@/llm/call-with-retry.js';
+import { callLlmWithRetry, LlmCallFailure, type RetryDeps } from '@/llm/call-llm-with-retry.js';
 import type { LlmClient } from '@/llm/llm-client.js';
 import { llmResponseSchema } from '@/llm/llm-response.js';
 import { normalizeLlmResponse } from '@/llm/normalize-llm-response.js';
 import { buildPrompt } from '@/llm/prompt.js';
-import type { AnalysisErrorCode, JobLog, TokenUsage } from '@/models/analysis.js';
+import type { AnalysisErrorCode, TokenUsage } from '@/models/analysis.js';
 import type { Log } from '@/models/log.js';
 import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
+
+/** Minimal logger the job needs; the request logger satisfies it, so job logs carry the `reqId`. */
+export interface JobLog {
+  info(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+  error(obj: object, msg: string): void;
+}
 
 export interface AnalysisJob {
   analysisId: string;
@@ -48,18 +55,26 @@ function durationSince(job: AnalysisJob, deps: ProcessDeps): number {
   return Math.max(0, deps.now().getTime() - job.createdAt.getTime());
 }
 
+const NO_OUTCOME: PartialOutcome = { rawResponse: null, usage: null };
+
+/** Compare-and-set to FAILED with the elapsed time; false when another writer already closed the analysis. */
+function recordFailure(
+  job: AnalysisJob,
+  deps: ProcessDeps,
+  errorCode: AnalysisErrorCode,
+  errorMessage: string,
+  partial: PartialOutcome = NO_OUTCOME,
+): Promise<boolean> {
+  return deps.repo.fail(job.analysisId, { errorCode, errorMessage, ...partial, durationMs: durationSince(job, deps) });
+}
+
 /** Compare-and-set to FAILED/INTERNAL_ERROR; also the last-resort write of the runner's `finally`. */
 export function markInternalError(
   job: AnalysisJob,
   deps: ProcessDeps,
-  partial: PartialOutcome = { rawResponse: null, usage: null },
+  partial: PartialOutcome = NO_OUTCOME,
 ): Promise<boolean> {
-  return deps.repo.fail(job.analysisId, {
-    errorCode: 'INTERNAL_ERROR',
-    errorMessage: INTERNAL_MESSAGE,
-    ...partial,
-    durationMs: durationSince(job, deps),
-  });
+  return recordFailure(job, deps, 'INTERNAL_ERROR', INTERNAL_MESSAGE, partial);
 }
 
 function parseResponse(text: string) {
@@ -87,7 +102,7 @@ export async function processAnalysis(
 
   let result;
   try {
-    result = await callWithRetry(
+    result = await callLlmWithRetry(
       (attemptSignal) => deps.llm.generate(request, attemptSignal),
       { ...deps.policy, signal },
       deps.retry,
@@ -95,13 +110,7 @@ export async function processAnalysis(
   } catch (error) {
     if (!(error instanceof LlmCallFailure)) throw error;
     const errorCode: AnalysisErrorCode = error.code;
-    await deps.repo.fail(job.analysisId, {
-      errorCode,
-      errorMessage: errorCode === 'INTERRUPTED' ? INTERRUPTED_MESSAGE : error.message,
-      rawResponse: null,
-      usage: null,
-      durationMs: durationSince(job, deps),
-    });
+    await recordFailure(job, deps, errorCode, errorCode === 'INTERRUPTED' ? INTERRUPTED_MESSAGE : error.message);
     return;
   }
 
@@ -109,13 +118,7 @@ export async function processAnalysis(
   try {
     const response = parseResponse(rawResponse);
     if (!response) {
-      await deps.repo.fail(job.analysisId, {
-        errorCode: 'LLM_INVALID_RESPONSE',
-        errorMessage: INVALID_RESPONSE_MESSAGE,
-        rawResponse,
-        usage,
-        durationMs: durationSince(job, deps),
-      });
+      await recordFailure(job, deps, 'LLM_INVALID_RESPONSE', INVALID_RESPONSE_MESSAGE, { rawResponse, usage });
       return;
     }
 

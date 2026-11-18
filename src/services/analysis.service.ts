@@ -1,10 +1,11 @@
 import { randomUUIDv7 } from 'node:crypto';
 import { llmClient } from '@/llm/llm.js';
-import type { AnalysisView, JobLog } from '@/models/analysis.js';
+import type { AnalysisView } from '@/models/analysis.js';
 import { analysisRepository } from '@/repositories/analysis.repository.js';
 import { ConflictError, NotFoundError, UnprocessableError } from '@/shared/errors.js';
 import { analysisRunner } from './analysis-runner.js';
 import { logsService, type ListLogsQuery } from './logs.service.js';
+import type { JobLog } from './process-analysis.js';
 
 export interface StartedAnalysis {
   id: string;

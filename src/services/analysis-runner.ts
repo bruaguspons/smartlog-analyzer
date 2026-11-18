@@ -1,5 +1,4 @@
 import { llmClient } from '@/llm/llm.js';
-import type { JobLog } from '@/models/analysis.js';
 import { analysisRepository, type AnalysisRepository } from '@/repositories/analysis.repository.js';
 import { config } from '@/shared/config/config.js';
 import {
@@ -7,6 +6,7 @@ import {
   markInternalError,
   processAnalysis,
   type AnalysisJob,
+  type JobLog,
   type PartialOutcome,
   type ProcessDeps,
 } from './process-analysis.js';

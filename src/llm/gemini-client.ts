@@ -21,7 +21,7 @@ function isAbort(error: unknown): boolean {
 }
 
 /**
- * Gemini adapter. Retries and timeouts belong to `callWithRetry`, so the SDK is built without
+ * Gemini adapter. Retries and timeouts belong to `callLlmWithRetry`, so the SDK is built without
  * `retryOptions` (a single attempt per call) and receives the attempt's AbortSignal.
  * Failure messages never include the SDK error text, which could echo request details.
  */

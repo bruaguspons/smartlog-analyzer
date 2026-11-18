@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmError, type LlmErrorKind } from '@/llm/llm-client.js';
-import { backoffDelayMs, callWithRetry, LlmCallFailure, type RetryDeps } from '@/llm/call-with-retry.js';
+import { backoffDelayMs, callLlmWithRetry, LlmCallFailure, type RetryDeps } from '@/llm/call-llm-with-retry.js';
 
 const TIMEOUT_MS = 1000;
 
@@ -45,18 +45,18 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('callWithRetry', () => {
+describe('callLlmWithRetry', () => {
   it('returns the first success without retrying', async () => {
     const fn = vi.fn().mockResolvedValue('ok');
     const { deps } = recordingDeps();
-    await expect(callWithRetry(fn, policy(3), deps)).resolves.toBe('ok');
+    await expect(callLlmWithRetry(fn, policy(3), deps)).resolves.toBe('ok');
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
   it('times out on every attempt -> 4 attempts with max 3 and LLM_TIMEOUT', async () => {
     const fn = vi.fn(() => new Promise<string>(() => undefined)); // ignores the signal and never settles
     const { deps, delays, scheduled } = recordingDeps();
-    const outcome = settle(callWithRetry(fn, policy(3), deps));
+    const outcome = settle(callLlmWithRetry(fn, policy(3), deps));
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS * 10);
     const result = await outcome;
     expect(fn).toHaveBeenCalledTimes(4);
@@ -79,7 +79,7 @@ describe('callWithRetry', () => {
       });
     });
     const { deps } = recordingDeps();
-    const outcome = settle(callWithRetry(fn, policy(0), deps));
+    const outcome = settle(callLlmWithRetry(fn, policy(0), deps));
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
     const result = await outcome;
     expect(signals[0]?.aborted).toBe(true);
@@ -94,7 +94,7 @@ describe('callWithRetry', () => {
       return calls === 1 ? new Promise<string>(() => undefined) : Promise.resolve('ok');
     });
     const { deps, scheduled } = recordingDeps();
-    const outcome = settle(callWithRetry(fn, policy(3), deps));
+    const outcome = settle(callLlmWithRetry(fn, policy(3), deps));
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS * 2);
     expect(await outcome).toEqual({ ok: true, value: 'ok' });
     expect(fn).toHaveBeenCalledTimes(2);
@@ -107,7 +107,7 @@ describe('callWithRetry', () => {
       attemptSignal = signal;
       return new Promise<string>(() => undefined);
     });
-    const outcome = settle(callWithRetry(fn, policy(0), { random: () => 0.5 }));
+    const outcome = settle(callLlmWithRetry(fn, policy(0), { random: () => 0.5 }));
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS - 1);
     expect(attemptSignal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
@@ -122,7 +122,7 @@ describe('callWithRetry', () => {
       .fn<(signal: AbortSignal) => Promise<string>>()
       .mockRejectedValueOnce(new LlmError('unavailable', 'boom'))
       .mockResolvedValueOnce('ok');
-    const outcome = settle(callWithRetry(fn, policy(3), { random: () => 0.5 }));
+    const outcome = settle(callLlmWithRetry(fn, policy(3), { random: () => 0.5 }));
     await vi.advanceTimersByTimeAsync(999);
     expect(fn).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
@@ -138,7 +138,7 @@ describe('callWithRetry', () => {
   ])('%s failures make %i attempt(s) with maxRetries=2', async (kind, attempts) => {
     const { deps } = recordingDeps();
     const fn = vi.fn().mockRejectedValue(new LlmError(kind, 'boom'));
-    await settle(callWithRetry(fn, policy(2), deps));
+    await settle(callLlmWithRetry(fn, policy(2), deps));
     expect(fn).toHaveBeenCalledTimes(attempts);
   });
 
@@ -146,7 +146,7 @@ describe('callWithRetry', () => {
     const run = async (kind: LlmErrorKind) => {
       const { deps, delays } = recordingDeps(() => 0.3);
       const fn = vi.fn().mockRejectedValue(new LlmError(kind, 'boom'));
-      const result = await settle(callWithRetry(fn, policy(3), deps));
+      const result = await settle(callLlmWithRetry(fn, policy(3), deps));
       return { delays, fn, result };
     };
     const rate = await run('rate_limited');
@@ -160,7 +160,7 @@ describe('callWithRetry', () => {
   it.each<[LlmErrorKind]>([['unavailable'], ['network']])('%s exhausted -> LLM_UNAVAILABLE', async (kind) => {
     const { deps } = recordingDeps();
     const fn = vi.fn().mockRejectedValue(new LlmError(kind, 'boom'));
-    const result = await settle(callWithRetry(fn, policy(2), deps));
+    const result = await settle(callLlmWithRetry(fn, policy(2), deps));
     expect(fn).toHaveBeenCalledTimes(3);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatchObject({ code: 'LLM_UNAVAILABLE', attempts: 3 });
@@ -169,7 +169,7 @@ describe('callWithRetry', () => {
   it('rejected -> 1 attempt and LLM_REQUEST_REJECTED', async () => {
     const { deps, delays } = recordingDeps();
     const fn = vi.fn().mockRejectedValue(new LlmError('rejected', 'forbidden'));
-    const result = await settle(callWithRetry(fn, policy(3), deps));
+    const result = await settle(callLlmWithRetry(fn, policy(3), deps));
     expect(fn).toHaveBeenCalledTimes(1);
     expect(delays).toEqual([]);
     expect(result.ok).toBe(false);
@@ -179,7 +179,7 @@ describe('callWithRetry', () => {
   it('maxRetries=0 makes a single attempt', async () => {
     const { deps } = recordingDeps();
     const fn = vi.fn().mockRejectedValue(new LlmError('unavailable', 'boom'));
-    const result = await settle(callWithRetry(fn, policy(0), deps));
+    const result = await settle(callLlmWithRetry(fn, policy(0), deps));
     expect(fn).toHaveBeenCalledTimes(1);
     expect(result.ok).toBe(false);
   });
@@ -187,7 +187,7 @@ describe('callWithRetry', () => {
   it('failure message and cause never leak into the message text', async () => {
     const { deps } = recordingDeps();
     const fn = vi.fn().mockRejectedValue(new LlmError('rejected', 'key=SECRET-KEY'));
-    const result = await settle(callWithRetry(fn, policy(0), deps));
+    const result = await settle(callLlmWithRetry(fn, policy(0), deps));
     expect(result.ok).toBe(false);
     if (!result.ok) expect((result.error as Error).message).not.toContain('SECRET-KEY');
   });
@@ -196,7 +196,7 @@ describe('callWithRetry', () => {
     const { deps } = recordingDeps();
     const boom = new TypeError('bug');
     const fn = vi.fn().mockRejectedValue(boom);
-    const result = await settle(callWithRetry(fn, policy(3), deps));
+    const result = await settle(callLlmWithRetry(fn, policy(3), deps));
     expect(fn).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ ok: false, error: boom });
   });
@@ -205,7 +205,7 @@ describe('callWithRetry', () => {
     for (const random of [0, 0.5, 0.999999]) {
       const { deps, delays } = recordingDeps(() => random);
       const fn = vi.fn().mockRejectedValue(new LlmError('unavailable', 'boom'));
-      await settle(callWithRetry(fn, policy(3), deps));
+      await settle(callLlmWithRetry(fn, policy(3), deps));
       expect(delays).toHaveLength(3);
       delays.forEach((delay, n) => {
         const base = 1000 * 2 ** n;
@@ -227,7 +227,7 @@ describe('callWithRetry', () => {
       });
     });
     const { deps } = recordingDeps();
-    const outcome = settle(callWithRetry(fn, policy(3, run.signal), deps));
+    const outcome = settle(callLlmWithRetry(fn, policy(3, run.signal), deps));
     await vi.advanceTimersByTimeAsync(10);
     run.abort();
     const result = await outcome;
@@ -241,7 +241,7 @@ describe('callWithRetry', () => {
     const run = new AbortController();
     const fn = vi.fn().mockRejectedValue(new LlmError('unavailable', 'boom'));
     // Real default sleep: it must wake up on abort instead of waiting for the delay.
-    const outcome = settle(callWithRetry(fn, policy(3, run.signal), { random: () => 0.5 }));
+    const outcome = settle(callLlmWithRetry(fn, policy(3, run.signal), { random: () => 0.5 }));
     await vi.advanceTimersByTimeAsync(100);
     expect(fn).toHaveBeenCalledTimes(1);
     run.abort();
@@ -256,7 +256,7 @@ describe('callWithRetry', () => {
     run.abort();
     const fn = vi.fn().mockResolvedValue('ok');
     const { deps } = recordingDeps();
-    const result = await settle(callWithRetry(fn, policy(3, run.signal), deps));
+    const result = await settle(callLlmWithRetry(fn, policy(3, run.signal), deps));
     expect(fn).not.toHaveBeenCalled();
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatchObject({ code: 'INTERRUPTED', attempts: 0 });

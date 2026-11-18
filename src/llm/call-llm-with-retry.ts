@@ -87,7 +87,7 @@ function rejectOnAbort(signal: AbortSignal): Promise<never> {
  * with exponential backoff and jitter. Non-retryable failures and run interruption stop at once.
  * Errors that are not `LlmError` are programming errors: rethrown untouched, never retried.
  */
-export async function callWithRetry<T>(
+export async function callLlmWithRetry<T>(
   fn: (signal: AbortSignal) => Promise<T>,
   policy: RetryPolicy,
   overrides: Partial<RetryDeps> = {},
