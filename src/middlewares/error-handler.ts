@@ -4,7 +4,7 @@ import { AppError, NotFoundError } from '@/shared/errors.js';
 import { parseJsonBody } from './parse-json-body.js';
 
 const INTERNAL_MESSAGE = 'Internal server error';
-/** What the API said when the old framework could not parse a body. */
+/** Message the API has always returned for a body that is not valid JSON. */
 const INVALID_JSON_MESSAGE = "Body is not valid JSON but content-type is set to 'application/json'";
 const TOO_LARGE_MESSAGE = 'Request body is too large';
 

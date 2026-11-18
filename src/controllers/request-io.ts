@@ -31,7 +31,7 @@ export class ResponseValidationError extends Error {
 /**
  * Validates one part of the request and returns the typed result. The input is never mutated
  * (`req.query` is a getter in Express 5, so it could not be replaced anyway).
- * An absent body reads as `null`, which is what the old framework reported for it.
+ * An absent body reads as `null`, which is what the API has always reported for it.
  */
 export function parseRequest<S extends z.ZodType>(part: RequestPart, schema: S, value: unknown): z.output<S> {
   const parsed = schema.safeParse(value ?? null);

@@ -21,7 +21,7 @@ export interface IntegrationRuntimeOptions {
   maxRetries?: number;
   /** Decorates the real Prisma analysis repository, e.g. to sabotage one write. */
   wrapAnalysisRepo?: (repo: AnalysisRepository) => AnalysisRepository;
-  /** Runs when the app's `onClose` reaches the disconnect step, so a test can observe state at that moment. */
+  /** Runs when `runtime.close()` reaches the disconnect step, so a test can observe state at that moment. */
   onDisconnect?: () => Promise<void>;
 }
 
