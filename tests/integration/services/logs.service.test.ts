@@ -174,7 +174,9 @@ describe('LogsService.stats', () => {
       ],
     });
     expect(countByServiceAndLevel).toHaveBeenCalledWith(filters);
-    expect(findNamesByIds).toHaveBeenCalledWith([1, 3]);
+    // groupBy has no ORDER BY, so the ids can arrive in any order.
+    expect(findNamesByIds).toHaveBeenCalledOnce();
+    expect(findNamesByIds.mock.calls[0]?.[0].toSorted()).toEqual([1, 3]);
   });
 
   it('no groups returns an empty result without looking up names', async () => {
