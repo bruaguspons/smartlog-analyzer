@@ -1,3 +1,5 @@
-import type { StartAnalysisDeps } from '@/modules/analysis/application/start-analysis/start-analysis.types.js';
+import type { AnalysisService } from '@/services/analysis.service.js';
 
-export type AnalysisRoutesDeps = StartAnalysisDeps;
+export interface AnalysisRoutesDeps {
+  analysis: AnalysisService;
+}

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import type { Runtime } from '@/composition/runtime.types.js';
-import { recoverInterrupted } from '@/modules/analysis/application/recover-interrupted/recover-interrupted.js';
+import { recoverInterrupted } from '@/services/analysis-runner.js';
 import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
 import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';

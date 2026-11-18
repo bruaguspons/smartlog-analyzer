@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import type { AnalysisRunner } from '@/modules/analysis/application/run-analysis/analysis-runner.js';
-import type { RetryDeps } from '@/modules/analysis/application/run-analysis/retry/retry.types.js';
+import type { RetryDeps } from '@/llm/call-with-retry.js';
+import type { AnalysisRunner } from '@/services/analysis-runner.js';
 import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
-import type { LlmClient } from '@/modules/analysis/domain/llm-client.types.js';
+import type { LlmClient } from '@/llm/llm-client.js';
 import type { LogRepository } from '@/repositories/log.repository.js';
 import type { ServiceRepository } from '@/repositories/service.repository.js';
 import type { DatabaseCheck } from '@/shared/http/health/health.types.js';

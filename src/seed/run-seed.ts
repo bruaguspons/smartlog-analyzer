@@ -1,5 +1,12 @@
-import type { Config } from '@/shared/config/config.types.js';
-import type { SeedRunDeps } from './run-seed.types.js';
+import type { Config } from '@/shared/config/load-config.js';
+import type { PrismaClient } from '@/shared/db/generated/client.js';
+
+export interface SeedRunDeps {
+  createPrisma: (databaseUrl: string) => PrismaClient;
+  /** Seeds services then sample logs; returns how many sample logs were inserted. */
+  seed: (prisma: PrismaClient) => Promise<number>;
+  log: (message: string) => void;
+}
 
 /** `SEED_ON_START=false` skips everything (no connection, no rows); the pool is always released. */
 export async function runSeed(config: Pick<Config, 'seedOnStart' | 'databaseUrl'>, deps: SeedRunDeps): Promise<void> {

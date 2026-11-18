@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { ServiceUnavailableError } from '@/shared/errors/service-unavailable-error.js';
+import { ServiceUnavailableError } from '@/shared/errors.js';
 import { HEALTH_DB_TIMEOUT_MS } from './health.const.js';
 import type { DatabaseCheck, HealthRouteOptions } from './health.types.js';
 

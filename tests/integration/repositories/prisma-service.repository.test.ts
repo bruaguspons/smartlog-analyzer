@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
-import { DEV_SERVICES } from '@/modules/services/infrastructure/dev-services.const.js';
-import { seedServices } from '@/modules/services/infrastructure/seed-services.js';
+import { DEV_SERVICES, seedServices } from '@/seed/seed-services.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { runServiceRepositoryContract } from '@tests/support/contracts/service-repository-contract.js';
 

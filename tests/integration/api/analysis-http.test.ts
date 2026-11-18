@@ -10,7 +10,7 @@ import {
   it,
 } from "vitest";
 import type { Runtime } from '@/composition/runtime.types.js';
-import { LlmError } from '@/modules/analysis/domain/llm-error.js';
+import { LlmError } from '@/llm/llm-client.js';
 import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { analysisId, logId } from '@tests/support/contracts/analysis-repository-contract.js';

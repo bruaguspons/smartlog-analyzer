@@ -6,8 +6,7 @@ import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.re
 import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import type { Service } from '@/models/service.js';
 import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
-import type { Config } from '@/shared/config/config.types.js';
-import { loadConfig } from '@/shared/config/load-config.js';
+import { loadConfig, type Config } from '@/shared/config/load-config.js';
 import { analysisId, logId } from '@tests/support/contracts/analysis-repository-contract.js';
 import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';

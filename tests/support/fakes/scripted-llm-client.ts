@@ -1,4 +1,4 @@
-import type { LlmClient, LlmRequest, LlmResult } from '@/modules/analysis/domain/llm-client.types.js';
+import type { LlmClient, LlmRequest, LlmResult } from '@/llm/llm-client.js';
 
 export type ScriptStep =
   | LlmResult

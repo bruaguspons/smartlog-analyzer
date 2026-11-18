@@ -1,7 +1,7 @@
 import { randomUUIDv7 } from 'node:crypto';
 import { runSeed } from '@/seed/run-seed.js';
-import { seedLogs } from '@/modules/logs/infrastructure/seed-logs/seed-logs.js';
-import { seedServices } from '@/modules/services/infrastructure/seed-services.js';
+import { seedLogs } from '@/seed/seed-logs.js';
+import { seedServices } from '@/seed/seed-services.js';
 import { loadConfig } from '@/shared/config/load-config.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 

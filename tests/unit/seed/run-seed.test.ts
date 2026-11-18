@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runSeed } from '@/seed/run-seed.js';
-import type { SeedRunDeps } from '@/seed/run-seed.types.js';
+import { runSeed, type SeedRunDeps } from '@/seed/run-seed.js';
 import type { PrismaClient } from '@/shared/db/generated/client.js';
 
 function fixture(seed: SeedRunDeps['seed'] = () => Promise.resolve(12)) {

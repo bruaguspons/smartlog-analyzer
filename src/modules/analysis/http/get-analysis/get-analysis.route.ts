@@ -1,6 +1,5 @@
 import type { ZodApi } from '@/shared/http/zod-api.types.js';
 import type { AnalysisRoutesDeps } from '@/modules/analysis/http/create-analysis-routes.types.js';
-import { getAnalysis } from '@/modules/analysis/application/get-analysis/get-analysis.js';
 import { analysisIdParamsSchema, analysisResponseSchema } from './get-analysis.schema.js';
 
 export function registerGetAnalysisRoute(api: ZodApi, deps: AnalysisRoutesDeps): void {
@@ -14,6 +13,6 @@ export function registerGetAnalysisRoute(api: ZodApi, deps: AnalysisRoutesDeps):
         response: { 200: analysisResponseSchema },
       },
     },
-    (request) => getAnalysis(request.params.id, { repo: deps.analysisRepo }),
+    (request) => deps.analysis.get(request.params.id),
   );
 }

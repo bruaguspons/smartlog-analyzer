@@ -1,10 +1,11 @@
 import { randomUUIDv7 } from 'node:crypto';
 import { buildApp } from '@/app/build-app.js';
-import { AnalysisRunner } from '@/modules/analysis/application/run-analysis/analysis-runner.js';
-import { recoverInterrupted } from '@/modules/analysis/application/recover-interrupted/recover-interrupted.js';
 import { createAnalysisRoutes } from '@/modules/analysis/http/create-analysis-routes.js';
 import { createLogsRoutes } from '@/modules/logs/http/create-logs-routes.js';
-import type { Config } from '@/shared/config/config.types.js';
+import type { Config } from '@/shared/config/load-config.js';
+import { AnalysisRunner, recoverInterrupted } from '@/services/analysis-runner.js';
+import { AnalysisService } from '@/services/analysis.service.js';
+import { LogsService } from '@/services/logs.service.js';
 import type { Runtime, RuntimeDeps } from './runtime.types.js';
 
 /** Wires the application from its dependencies without listening or touching process-level state. */
@@ -19,12 +20,14 @@ export function createRuntime(config: Config, deps: RuntimeDeps): Runtime {
     now,
     ...(deps.retry && { retry: deps.retry }),
   });
+  const logs = new LogsService({ logRepo, serviceRepo, newId });
+  const analysis = new AnalysisService({ logs, analysisRepo, runner, llm, newId, now });
   const app = buildApp({
     serviceRepository: serviceRepo,
     checkDatabase: deps.checkDatabase,
     apiRoutes: [
-      createLogsRoutes({ repo: logRepo, serviceRepo, newId, now }),
-      createAnalysisRoutes({ logRepo, analysisRepo, runner, llm, newId, now }),
+      createLogsRoutes({ logs, now }),
+      createAnalysisRoutes({ analysis }),
     ],
     logLevel: config.logLevel,
     ...(deps.logStream && { logStream: deps.logStream }),

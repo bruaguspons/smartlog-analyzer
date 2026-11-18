@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { authenticate } from '@/modules/services/application/authenticate/authenticate.js';
 import type { Service } from '@/models/service.js';
 import type { ServiceRepository } from '@/repositories/service.repository.js';
-import { UnauthorizedError } from '@/shared/errors/unauthorized-error.js';
+import { UnauthorizedError } from '@/shared/errors.js';
 
 const active: Service = { id: 1, name: 'svc', description: null, apiKey: 'k-active', isActive: true };
 const inactive: Service = { ...active, id: 2, apiKey: 'k-off', isActive: false };

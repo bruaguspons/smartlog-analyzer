@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '@/app/build-app.js';
 import { createLogsRoutes } from '@/modules/logs/http/create-logs-routes.js';
+import { LogsService } from '@/services/logs.service.js';
 import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import type { Service } from '@/models/service.js';
 import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
@@ -20,7 +21,10 @@ describe('OpenAPI document', () => {
     app = buildApp({
       serviceRepository: serviceRepo,
       checkDatabase: () => Promise.resolve(),
-      apiRoutes: [createLogsRoutes({ repo: new InMemoryLogRepository(), serviceRepo, newId: () => ID, now: () => NOW })],
+      apiRoutes: [createLogsRoutes({
+          logs: new LogsService({ logRepo: new InMemoryLogRepository(), serviceRepo, newId: () => ID }),
+          now: () => NOW,
+        })],
       logLevel: 'silent',
     });
     await app.ready();

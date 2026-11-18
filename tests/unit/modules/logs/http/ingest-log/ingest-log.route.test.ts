@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '@/app/build-app.js';
 import type { LogRepository } from '@/repositories/log.repository.js';
 import { createLogsRoutes } from '@/modules/logs/http/create-logs-routes.js';
+import { LogsService } from '@/services/logs.service.js';
 import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import type { Service } from '@/models/service.js';
 import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
@@ -28,7 +29,7 @@ describe('POST /api/logs', () => {
     app = buildApp({
       serviceRepository: serviceRepo,
       checkDatabase: () => Promise.resolve(),
-      apiRoutes: [createLogsRoutes({ repo, serviceRepo, newId, now: () => NOW })],
+      apiRoutes: [createLogsRoutes({ logs: new LogsService({ logRepo: repo, serviceRepo, newId }), now: () => NOW })],
       logLevel: 'silent',
     });
     return app;

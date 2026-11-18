@@ -3,7 +3,9 @@ import { afterEach } from 'vitest';
 import { buildApp } from '@/app/build-app.js';
 import { createAnalysisRoutes } from '@/modules/analysis/http/create-analysis-routes.js';
 import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
-import { AnalysisRunner } from '@/modules/analysis/application/run-analysis/analysis-runner.js';
+import { AnalysisRunner } from '@/services/analysis-runner.js';
+import { AnalysisService } from '@/services/analysis.service.js';
+import { LogsService } from '@/services/logs.service.js';
 import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import type { Service } from '@/models/service.js';
 import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
@@ -46,11 +48,14 @@ export function useAnalysisApp() {
     llm = new ScriptedLlmClient(...(script.length > 0 ? script : [okJson({ summary: 'Summary', findings: [] })]));
     runner = new AnalysisRunner({ repo: analysisRepo, llm, policy: { timeoutMs: 30_000, maxRetries: 0 }, now: () => NOW });
     let counter = 0;
+    const serviceRepo = new InMemoryServiceRepository([active, off]);
+    const logs = new LogsService({ logRepo, serviceRepo, newId: () => 'unused' });
+    const analysis = new AnalysisService({ logs, analysisRepo, runner, llm, newId: () => analysisId((counter += 1)), now: () => NOW });
     app = buildApp({
-      serviceRepository: new InMemoryServiceRepository([active, off]),
+      serviceRepository: serviceRepo,
       checkDatabase: () => Promise.resolve(),
       apiRoutes: [
-        createAnalysisRoutes({ logRepo, analysisRepo, runner, llm, newId: () => analysisId((counter += 1)), now: () => NOW }),
+        createAnalysisRoutes({ analysis }),
       ],
       logLevel: 'silent',
     });

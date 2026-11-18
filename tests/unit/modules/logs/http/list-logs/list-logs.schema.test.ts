@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodeCursor } from '@/modules/logs/application/cursor/encode-cursor.js';
+import { encodeCursor } from '@/shared/cursor.js';
 import { listLogsQuerySchema } from '@/modules/logs/http/list-logs/list-logs.schema.js';
 
 const ID = '0192f1c0-0000-7000-8000-000000000001';

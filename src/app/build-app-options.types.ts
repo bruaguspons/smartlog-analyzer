@@ -1,6 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type { ServiceRepository } from '@/repositories/service.repository.js';
-import type { LogLevel } from '@/shared/config/config.types.js';
+import type { LogLevel } from '@/shared/config/load-config.js';
 import type { DatabaseCheck } from '@/shared/http/health/health.types.js';
 
 export interface BuildAppOptions {

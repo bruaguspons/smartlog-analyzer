@@ -1,5 +1,5 @@
 import { hasZodFastifySchemaValidationErrors, isResponseSerializationError } from 'fastify-type-provider-zod';
-import { AppError } from '@/shared/errors/app-error.js';
+import { AppError } from '@/shared/errors.js';
 import { CLIENT_CODES, INTERNAL_MESSAGE } from './error-handler.const.js';
 import type { ErrorResponse } from './error-handler.types.js';
 

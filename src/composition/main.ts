@@ -1,6 +1,4 @@
-import { ConfigError } from '@/shared/config/config-error.js';
-import type { Config } from '@/shared/config/config.types.js';
-import { loadConfig } from '@/shared/config/load-config.js';
+import { ConfigError, loadConfig, type Config } from '@/shared/config/load-config.js';
 import { createPrismaDeps } from './create-prisma-deps.js';
 import { createRuntime } from './create-runtime.js';
 import { defaultProcessIo } from './default-process-io.js';

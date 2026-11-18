@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigError } from '@/shared/config/config-error.js';
-import { loadConfig } from '@/shared/config/load-config.js';
+import { ConfigError, loadConfig } from '@/shared/config/load-config.js';
 
 const BASE = { DATABASE_URL: 'postgresql://u:p@localhost:5432/db' };
 

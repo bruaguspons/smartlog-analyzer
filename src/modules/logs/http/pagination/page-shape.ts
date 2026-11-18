@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { decodeCursor } from '@/modules/logs/application/cursor/decode-cursor.js';
+import { decodeCursor } from '@/shared/cursor.js';
 import { DEFAULT_LIMIT, MAX_LIMIT } from './pagination.const.js';
 
 /** Page controls shared by listing and analyze: defined once so both validate identically. */

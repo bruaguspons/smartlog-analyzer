@@ -1,4 +1,4 @@
-import { UnauthorizedError } from '@/shared/errors/unauthorized-error.js';
+import { UnauthorizedError } from '@/shared/errors.js';
 import type { Service } from '@/models/service.js';
 import type { ServiceRepository } from '@/repositories/service.repository.js';
 

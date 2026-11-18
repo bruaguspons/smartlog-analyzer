@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { isResponseSerializationError } from 'fastify-type-provider-zod';
-import { NotFoundError } from '@/shared/errors/not-found-error.js';
+import { NotFoundError } from '@/shared/errors.js';
 import { toErrorResponse } from './to-error-response.js';
 
 /** Registers the single error handler and the not-found handler on the root instance. */
