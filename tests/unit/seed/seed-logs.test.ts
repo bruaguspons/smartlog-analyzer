@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LOG_LEVELS } from '@/models/log.js';
 import { FROM_EXAMPLE, TO_EXAMPLE } from '@/schemas/log-filters.schema.js';
-import { SAMPLE_LOG_COUNT, SAMPLE_LOGS_END } from '@/seed/sample-logs.const.js';
+import { SAMPLE_LOG_COUNT, SAMPLE_LOGS_END } from '@/seed/sample-logs-data.js';
 import { buildSampleLogs, type SampleServiceIds } from '@/seed/seed-logs.js';
 
 const ids: SampleServiceIds = { payments: 11, orders: 22 };

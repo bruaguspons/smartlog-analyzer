@@ -1,27 +1,14 @@
-import type { JsonObject, Log, LogLevel } from '@/models/log.js';
+import type { Log } from '@/models/log.js';
 import type { PrismaClient } from '@/shared/db/generated/client.js';
-import { SAMPLE_LOGS_END, SAMPLE_SPECS } from './sample-logs.const.js';
-import { DEV_SERVICES } from './seed-services.js';
+import { SAMPLE_LOGS_END, SAMPLE_SPECS, type SampleService } from './sample-logs-data.js';
+import { DEV_API_KEYS } from './seed-services.js';
 
 export interface SeedLogsDeps {
   newId: () => string;
 }
 
 /** Database ids of the two active dev services that own the sample logs. */
-export interface SampleServiceIds {
-  payments: number;
-  orders: number;
-}
-
-export interface SampleSpec {
-  service: keyof SampleServiceIds;
-  /** Minutes before `SAMPLE_LOGS_END`. */
-  minutesAgo: number;
-  level: LogLevel;
-  message: string;
-  traceId: string | null;
-  metadata: JsonObject | null;
-}
+export type SampleServiceIds = Record<SampleService, number>;
 
 /** Pure and deterministic given `deps`: ids come from `newId`, timestamps from `SAMPLE_LOGS_END`. */
 export function buildSampleLogs(ids: SampleServiceIds, deps: SeedLogsDeps): Log[] {
@@ -47,7 +34,7 @@ export function buildSampleLogs(ids: SampleServiceIds, deps: SeedLogsDeps): Log[
 export async function seedLogs(prisma: PrismaClient, deps: SeedLogsDeps): Promise<number> {
   if ((await prisma.log.count()) > 0) return 0;
 
-  const [payments, orders] = [DEV_SERVICES[0].apiKey, DEV_SERVICES[1].apiKey];
+  const { payments, orders } = DEV_API_KEYS;
   const rows = await prisma.service.findMany({
     where: { apiKey: { in: [payments, orders] } },
   });

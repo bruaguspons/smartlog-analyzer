@@ -1,4 +1,17 @@
-import type { SampleSpec } from './seed-logs.js';
+import type { JsonObject, LogLevel } from '@/models/log.js';
+
+/** Dev services that own the sample logs. */
+export type SampleService = 'payments' | 'orders';
+
+export interface SampleSpec {
+  service: SampleService;
+  /** Minutes before `SAMPLE_LOGS_END`. */
+  minutesAgo: number;
+  level: LogLevel;
+  message: string;
+  traceId: string | null;
+  metadata: JsonObject | null;
+}
 
 /**
  * Fixed instant the sample timestamps are measured back from. Fixed (not the seed's `now`) so

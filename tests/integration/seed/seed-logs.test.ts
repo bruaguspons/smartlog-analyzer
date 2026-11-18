@@ -2,7 +2,7 @@ import { randomUUIDv7 } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '@/app.js';
-import { SAMPLE_LOG_COUNT } from '@/seed/sample-logs.const.js';
+import { SAMPLE_LOG_COUNT } from '@/seed/sample-logs-data.js';
 import { seedLogs } from '@/seed/seed-logs.js';
 import { DEV_SERVICES, seedServices } from '@/seed/seed-services.js';
 import { prisma } from '@/shared/db/prisma.js';
