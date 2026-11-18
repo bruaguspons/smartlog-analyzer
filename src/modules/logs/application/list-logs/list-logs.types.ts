@@ -1,6 +1,5 @@
-import type { LogCursor, LogFilters } from '@/modules/logs/domain/log-filters.types.js';
-import type { Log } from '@/modules/logs/domain/log.types.js';
-import type { LogRepository } from '@/modules/logs/domain/log-repository.types.js';
+import type { Log, LogCursor, LogFilters } from '@/models/log.js';
+import type { LogRepository } from '@/repositories/log.repository.js';
 
 export interface ListLogsQuery {
   filters: LogFilters;

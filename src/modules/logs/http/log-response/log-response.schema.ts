@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LOG_LEVELS } from '@/modules/logs/domain/log.const.js';
+import { LOG_LEVELS } from '@/models/log.js';
 import { jsonValueSchema } from './json-value.schema.js';
 
 export const logResponseSchema = z.object({

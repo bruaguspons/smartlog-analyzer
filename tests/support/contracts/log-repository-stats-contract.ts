@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { LogFilters } from '@/modules/logs/domain/log-filters.types.js';
-import type { Log } from '@/modules/logs/domain/log.types.js';
-import type { LogCountGroup, LogRepository } from '@/modules/logs/domain/log-repository.types.js';
+import type { Log, LogFilters } from '@/models/log.js';
+import type { LogCountGroup, LogRepository } from '@/repositories/log.repository.js';
 import { makeListLog } from './log-repository-list-contract.js';
 
 const T = (s: number) => new Date(`2026-11-03T10:00:${String(s).padStart(2, '0')}.000Z`);

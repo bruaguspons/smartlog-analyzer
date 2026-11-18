@@ -1,6 +1,6 @@
 import { listLogs } from '@/modules/logs/application/list-logs/list-logs.js';
 import type { ListLogsQuery } from '@/modules/logs/application/list-logs/list-logs.types.js';
-import type { JobLog } from '@/modules/analysis/domain/job-log.types.js';
+import type { JobLog } from '@/models/analysis.js';
 import { ConflictError } from '@/shared/errors/conflict-error.js';
 import { UnprocessableError } from '@/shared/errors/unprocessable-error.js';
 import type { StartAnalysisDeps, StartedAnalysis } from './start-analysis.types.js';

@@ -1,18 +1,57 @@
 import { Prisma, type PrismaClient } from '@/shared/db/generated/client.js';
-import type { AnalysisView, NewAnalysis } from '@/modules/analysis/domain/analysis.types.js';
+import type { AnalysisErrorCode, AnalysisView, NewAnalysis } from '@/models/analysis.js';
 import type {
   AnalysisRepository,
   CompleteInput,
   CreateProcessingOutcome,
   FailInput,
-} from '@/modules/analysis/domain/analysis-repository.types.js';
-import { viewInclude } from './analysis-view-include.const.js';
-import { toAnalysisView } from './to-analysis-view.js';
+} from '@/repositories/analysis.repository.js';
 
 const UNIQUE_VIOLATION = 'P2002';
 
 function isUniqueViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === UNIQUE_VIOLATION;
+}
+
+const viewInclude = {
+  findings: {
+    orderBy: { id: 'asc' },
+    include: { logs: { select: { logId: true }, orderBy: { logId: 'asc' } } },
+  },
+  _count: { select: { logs: true } },
+} satisfies Prisma.AnalysisInclude;
+
+type AnalysisRow = Prisma.AnalysisGetPayload<{ include: typeof viewInclude }>;
+
+function toAnalysisView(row: AnalysisRow): AnalysisView {
+  return {
+    id: row.id,
+    status: row.status,
+    createdAt: row.createdAt,
+    durationMs: row.durationMs,
+    logCount: row._count.logs,
+    provider: row.provider,
+    model: row.model,
+    summary: row.summary,
+    findings: row.findings.map((f) => ({
+      id: f.id,
+      category: f.category,
+      severity: f.severity,
+      description: f.description,
+      // Written only by this repository from a validated string[], so the narrow cast is safe.
+      suggestions: f.suggestions as string[],
+      logIds: f.logs.map((l) => l.logId),
+    })),
+    tokens:
+      row.promptTokens !== null && row.completionTokens !== null
+        ? { prompt: row.promptTokens, completion: row.completionTokens }
+        : null,
+    error:
+      row.errorCode !== null
+        ? // Written only by this repository from the AnalysisErrorCode union.
+          { code: row.errorCode as AnalysisErrorCode, message: row.errorMessage ?? '' }
+        : null,
+  };
 }
 
 export class PrismaAnalysisRepository implements AnalysisRepository {

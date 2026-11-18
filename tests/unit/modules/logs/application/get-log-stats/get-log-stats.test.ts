@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getLogStats } from '@/modules/logs/application/get-log-stats/get-log-stats.js';
-import type { LogCountGroup, LogRepository } from '@/modules/logs/domain/log-repository.types.js';
-import type { ServiceRepository } from '@/modules/services/domain/service-repository.types.js';
+import type { LogCountGroup, LogRepository } from '@/repositories/log.repository.js';
+import type { ServiceRepository } from '@/repositories/service.repository.js';
 
 function deps(groups: LogCountGroup[], names: [number, string][] = [[1, 'one'], [2, 'two'], [3, 'off']]) {
   const countByServiceAndLevel = vi.fn((): Promise<LogCountGroup[]> => Promise.resolve(groups));

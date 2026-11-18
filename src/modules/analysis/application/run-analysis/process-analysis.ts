@@ -1,5 +1,4 @@
-import type { AnalysisErrorCode } from '@/modules/analysis/domain/analysis.types.js';
-import type { JobLog } from '@/modules/analysis/domain/job-log.types.js';
+import type { AnalysisErrorCode, JobLog } from '@/models/analysis.js';
 import { llmResponseSchema } from '@/modules/analysis/application/llm-response/llm-response.schema.js';
 import { normalizeLlmResponse } from '@/modules/analysis/application/llm-response/normalize-llm-response.js';
 import { buildPrompt } from '@/modules/analysis/application/run-analysis/prompt/build-prompt.js';

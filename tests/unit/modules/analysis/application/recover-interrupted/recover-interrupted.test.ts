@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { recoverInterrupted } from '@/modules/analysis/application/recover-interrupted/recover-interrupted.js';
-import { InMemoryAnalysisRepository } from '@/modules/analysis/infrastructure/in-memory-analysis-repository.js';
+import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
 import { analysisId, logId } from '@tests/support/contracts/analysis-repository-contract.js';
 
 describe('recoverInterrupted', () => {

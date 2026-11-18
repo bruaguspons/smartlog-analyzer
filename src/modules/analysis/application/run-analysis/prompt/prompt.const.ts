@@ -1,4 +1,4 @@
-import { FINDING_CATEGORIES, FINDING_SEVERITIES } from '@/modules/analysis/domain/analysis.const.js';
+import { FINDING_CATEGORIES, FINDING_SEVERITIES } from '@/models/analysis.js';
 
 export const MAX_MESSAGE_CHARS = 2000;
 export const MAX_METADATA_CHARS = 500;

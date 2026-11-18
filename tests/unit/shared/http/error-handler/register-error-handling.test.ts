@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { buildApp } from '@/app/build-app.js';
-import { InMemoryServiceRepository } from '@/modules/services/infrastructure/in-memory-service-repository.js';
+import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
 import { AppError } from '@/shared/errors/app-error.js';
 
 const dbOk = () => Promise.resolve();

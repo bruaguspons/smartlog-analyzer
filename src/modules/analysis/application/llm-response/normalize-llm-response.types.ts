@@ -1,4 +1,4 @@
-import type { NewFinding } from '@/modules/analysis/domain/analysis.types.js';
+import type { NewFinding } from '@/models/analysis.js';
 
 export interface NormalizedResponse {
   summary: string;

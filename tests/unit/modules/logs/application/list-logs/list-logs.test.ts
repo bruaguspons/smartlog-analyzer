@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { decodeCursor } from '@/modules/logs/application/cursor/decode-cursor.js';
 import { encodeCursor } from '@/modules/logs/application/cursor/encode-cursor.js';
 import { listLogs } from '@/modules/logs/application/list-logs/list-logs.js';
-import type { Log } from '@/modules/logs/domain/log.types.js';
-import type { LogRepository } from '@/modules/logs/domain/log-repository.types.js';
-import { InMemoryLogRepository } from '@/modules/logs/infrastructure/in-memory-log-repository.js';
+import type { Log } from '@/models/log.js';
+import type { LogRepository } from '@/repositories/log.repository.js';
+import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
 
 async function seeded(count: number) {

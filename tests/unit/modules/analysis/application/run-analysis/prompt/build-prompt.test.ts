@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPrompt } from '@/modules/analysis/application/run-analysis/prompt/build-prompt.js';
-import type { Log } from '@/modules/logs/domain/log.types.js';
+import type { Log } from '@/models/log.js';
 
 const makeLog = (n: number, overrides: Partial<Log> = {}): Log => ({
   id: `id-${n}`,

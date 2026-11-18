@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { escapeLike } from '@/modules/logs/infrastructure/prisma-log-repository/escape-like.js';
+import { escapeLike } from '@/repositories/prisma-log-where.js';
 
 describe('escapeLike', () => {
   it('escapes backslash, percent and underscore', () => {

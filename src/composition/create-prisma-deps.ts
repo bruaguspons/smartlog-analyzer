@@ -1,7 +1,7 @@
 import { createLlmClient } from '@/modules/analysis/infrastructure/llm/create-llm-client.js';
-import { PrismaAnalysisRepository } from '@/modules/analysis/infrastructure/prisma-analysis-repository/prisma-analysis-repository.js';
-import { PrismaLogRepository } from '@/modules/logs/infrastructure/prisma-log-repository/prisma-log-repository.js';
-import { PrismaServiceRepository } from '@/modules/services/infrastructure/prisma-service-repository.js';
+import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
+import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
+import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
 import type { Config } from '@/shared/config/config.types.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import type { RuntimeDeps } from './runtime.types.js';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { FINDING_CATEGORIES, FINDING_SEVERITIES } from '@/modules/analysis/domain/analysis.const.js';
+import { FINDING_CATEGORIES, FINDING_SEVERITIES } from '@/models/analysis.js';
 import { requestedResponseSchema } from '@/modules/analysis/application/llm-response/requested-response.schema.js';
 
 describe('requestedResponseSchema (sent to the model)', () => {

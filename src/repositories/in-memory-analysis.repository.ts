@@ -1,10 +1,10 @@
-import type { AnalysisView, FindingView, NewAnalysis } from '@/modules/analysis/domain/analysis.types.js';
+import type { AnalysisView, FindingView, NewAnalysis } from '@/models/analysis.js';
 import type {
   AnalysisRepository,
   CompleteInput,
   CreateProcessingOutcome,
   FailInput,
-} from '@/modules/analysis/domain/analysis-repository.types.js';
+} from '@/repositories/analysis.repository.js';
 
 type Stored = Omit<AnalysisView, 'logCount' | 'findings'> & { logIds: string[]; findings: FindingView[] };
 

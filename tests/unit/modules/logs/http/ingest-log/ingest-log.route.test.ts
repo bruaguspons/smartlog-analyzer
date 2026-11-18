@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '@/app/build-app.js';
-import type { LogRepository } from '@/modules/logs/domain/log-repository.types.js';
+import type { LogRepository } from '@/repositories/log.repository.js';
 import { createLogsRoutes } from '@/modules/logs/http/create-logs-routes.js';
-import { InMemoryLogRepository } from '@/modules/logs/infrastructure/in-memory-log-repository.js';
-import type { Service } from '@/modules/services/domain/service.types.js';
-import { InMemoryServiceRepository } from '@/modules/services/infrastructure/in-memory-service-repository.js';
+import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
+import type { Service } from '@/models/service.js';
+import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
 
 const ID = '0192f1c0-0000-7000-8000-000000000001';
 const NOW = new Date('2026-11-03T12:00:00.000Z');

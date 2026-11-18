@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { JsonValue } from '@/modules/logs/domain/log.types.js';
+import type { JsonValue } from '@/models/log.js';
 
 /**
  * Any JSON value (same accepted domain as `z.json()`).

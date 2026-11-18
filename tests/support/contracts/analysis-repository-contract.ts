@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { NewFinding } from '@/modules/analysis/domain/analysis.types.js';
-import type { AnalysisRepository } from '@/modules/analysis/domain/analysis-repository.types.js';
+import type { NewFinding } from '@/models/analysis.js';
+import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
 
 const uuid = (prefix: string, n: number) => `0192f1c0-${prefix}-7000-8000-${String(n).padStart(12, '0')}`;
 export const analysisId = (n: number) => uuid('aaaa', n);

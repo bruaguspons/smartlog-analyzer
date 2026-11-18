@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { main } from '@/composition/main.js';
 import type { ProcessIo } from '@/composition/process-io.types.js';
 import type { RuntimeDeps } from '@/composition/runtime.types.js';
-import { InMemoryAnalysisRepository } from '@/modules/analysis/infrastructure/in-memory-analysis-repository.js';
-import { InMemoryLogRepository } from '@/modules/logs/infrastructure/in-memory-log-repository.js';
-import type { Service } from '@/modules/services/domain/service.types.js';
-import { InMemoryServiceRepository } from '@/modules/services/infrastructure/in-memory-service-repository.js';
+import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
+import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
+import type { Service } from '@/models/service.js';
+import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
 import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
 import { okJson, ScriptedLlmClient, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
 

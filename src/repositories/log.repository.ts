@@ -1,5 +1,4 @@
-import type { LogFilters, LogPageRequest } from './log-filters.types.js';
-import type { Log, LogLevel } from './log.types.js';
+import type { Log, LogFilters, LogLevel, LogPageRequest } from '@/models/log.js';
 
 /** Raw count of logs for one (service, level) pair; names are resolved by the caller. */
 export interface LogCountGroup {

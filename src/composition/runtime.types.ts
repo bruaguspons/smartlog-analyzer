@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import type { AnalysisRunner } from '@/modules/analysis/application/run-analysis/analysis-runner.js';
 import type { RetryDeps } from '@/modules/analysis/application/run-analysis/retry/retry.types.js';
-import type { AnalysisRepository } from '@/modules/analysis/domain/analysis-repository.types.js';
+import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
 import type { LlmClient } from '@/modules/analysis/domain/llm-client.types.js';
-import type { LogRepository } from '@/modules/logs/domain/log-repository.types.js';
-import type { ServiceRepository } from '@/modules/services/domain/service-repository.types.js';
+import type { LogRepository } from '@/repositories/log.repository.js';
+import type { ServiceRepository } from '@/repositories/service.repository.js';
 import type { DatabaseCheck } from '@/shared/http/health/health.types.js';
 
 /** Everything the runtime needs from the outside world; tests inject in-memory fakes. */

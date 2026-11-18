@@ -3,7 +3,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { buildApp } from '@/app/build-app.js';
-import type { ServiceRepository } from '@/modules/services/domain/service-repository.types.js';
+import type { ServiceRepository } from '@/repositories/service.repository.js';
 
 const dbOk = () => Promise.resolve();
 

@@ -1,5 +1,4 @@
-import type { LogFilters } from '@/modules/logs/domain/log-filters.types.js';
-import { LOG_LEVELS } from '@/modules/logs/domain/log.const.js';
+import { LOG_LEVELS, type LogFilters } from '@/models/log.js';
 import type { GetLogStatsDeps, LogStats, LogStatsGroup } from './get-log-stats.types.js';
 
 export async function getLogStats(filters: LogFilters, deps: GetLogStatsDeps): Promise<LogStats> {

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
-import { PrismaAnalysisRepository } from '@/modules/analysis/infrastructure/prisma-analysis-repository/prisma-analysis-repository.js';
+import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { analysisId, logId, runAnalysisRepositoryContract } from '@tests/support/contracts/analysis-repository-contract.js';
 

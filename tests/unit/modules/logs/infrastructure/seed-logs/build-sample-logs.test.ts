@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOG_LEVELS } from '@/modules/logs/domain/log.const.js';
+import { LOG_LEVELS } from '@/models/log.js';
 import { FROM_EXAMPLE, TO_EXAMPLE } from '@/modules/logs/http/log-filters/log-filters.const.js';
 import { SAMPLE_LOG_COUNT, SAMPLE_LOGS_END } from '@/modules/logs/infrastructure/seed-logs/sample-specs.const.js';
 import { buildSampleLogs } from '@/modules/logs/infrastructure/seed-logs/build-sample-logs.js';

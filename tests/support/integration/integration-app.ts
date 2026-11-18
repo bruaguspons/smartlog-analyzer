@@ -1,10 +1,10 @@
 import type { Runtime } from '@/composition/runtime.types.js';
 import { createRuntime } from '@/composition/create-runtime.js';
-import type { AnalysisRepository } from '@/modules/analysis/domain/analysis-repository.types.js';
+import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
 import type { LlmClient } from '@/modules/analysis/domain/llm-client.types.js';
-import { PrismaAnalysisRepository } from '@/modules/analysis/infrastructure/prisma-analysis-repository/prisma-analysis-repository.js';
-import { PrismaLogRepository } from '@/modules/logs/infrastructure/prisma-log-repository/prisma-log-repository.js';
-import { PrismaServiceRepository } from '@/modules/services/infrastructure/prisma-service-repository.js';
+import { PrismaAnalysisRepository } from '@/repositories/prisma-analysis.repository.js';
+import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
+import { PrismaServiceRepository } from '@/repositories/prisma-service.repository.js';
 import { loadConfig } from '@/shared/config/load-config.js';
 import type { PrismaClient } from '@/shared/db/generated/client.js';
 

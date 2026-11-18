@@ -1,5 +1,10 @@
-import { FINDING_CATEGORIES, FINDING_SEVERITIES } from '@/modules/analysis/domain/analysis.const.js';
-import { type FindingCategory, type FindingSeverity, type NewFinding } from '@/modules/analysis/domain/analysis.types.js';
+import {
+  FINDING_CATEGORIES,
+  FINDING_SEVERITIES,
+  type FindingCategory,
+  type FindingSeverity,
+  type NewFinding,
+} from '@/models/analysis.js';
 import type { LlmResponse } from './llm-response.types.js';
 import type { NormalizedResponse } from './normalize-llm-response.types.js';
 

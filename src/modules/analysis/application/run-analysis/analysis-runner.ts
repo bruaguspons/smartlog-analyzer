@@ -2,7 +2,7 @@ import { AnalysisProcessingError } from './analysis-processing-error.js';
 import { markInternalError } from './mark-internal-error.js';
 import { processAnalysis } from './process-analysis.js';
 import { type AnalysisJob, type PartialOutcome, type ProcessDeps } from './process-analysis.types.js';
-import type { JobLog } from '@/modules/analysis/domain/job-log.types.js';
+import type { JobLog } from '@/models/analysis.js';
 
 interface InFlight {
   controller: AbortController;

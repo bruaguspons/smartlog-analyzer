@@ -1,4 +1,4 @@
-import type { Log } from '@/modules/logs/domain/log.types.js';
+import type { Log } from '@/models/log.js';
 import { SAMPLE_LOGS_END, SAMPLE_SPECS } from './sample-specs.const.js';
 import type { SampleServiceIds, SeedLogsDeps } from './seed-logs.types.js';
 

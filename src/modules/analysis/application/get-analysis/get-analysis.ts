@@ -1,6 +1,6 @@
 import { NotFoundError } from '@/shared/errors/not-found-error.js';
-import type { AnalysisView } from '@/modules/analysis/domain/analysis.types.js';
-import type { AnalysisRepository } from '@/modules/analysis/domain/analysis-repository.types.js';
+import type { AnalysisView } from '@/models/analysis.js';
+import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
 
 export async function getAnalysis(id: string, deps: { repo: AnalysisRepository }): Promise<AnalysisView> {
   const view = await deps.repo.findById(id);

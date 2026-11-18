@@ -1,5 +1,5 @@
-import type { Log } from '@/modules/logs/domain/log.types.js';
-import type { TokenUsage } from './analysis.types.js';
+import type { Log } from '@/models/log.js';
+import type { TokenUsage } from '@/models/analysis.js';
 
 /** A log as presented to the model: `ref` is its 1-based position in the batch. */
 export interface NumberedLog {

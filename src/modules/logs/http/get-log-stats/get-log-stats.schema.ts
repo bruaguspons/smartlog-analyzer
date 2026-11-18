@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LOG_LEVELS } from '@/modules/logs/domain/log.const.js';
+import { LOG_LEVELS } from '@/models/log.js';
 import { checkDateRange } from '@/modules/logs/http/validation/check-date-range.js';
 import { logFiltersShape } from '@/modules/logs/http/log-filters/log-filters.schema.js';
 

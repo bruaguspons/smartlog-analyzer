@@ -1,6 +1,6 @@
 import { UnauthorizedError } from '@/shared/errors/unauthorized-error.js';
-import type { Service } from '@/modules/services/domain/service.types.js';
-import type { ServiceRepository } from '@/modules/services/domain/service-repository.types.js';
+import type { Service } from '@/models/service.js';
+import type { ServiceRepository } from '@/repositories/service.repository.js';
 
 const MAX_KEY_LENGTH = 256;
 

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ingestLog } from '@/modules/logs/application/ingest-log/ingest-log.js';
-import type { Log } from '@/modules/logs/domain/log.types.js';
-import type { LogRepository } from '@/modules/logs/domain/log-repository.types.js';
-import { InMemoryLogRepository } from '@/modules/logs/infrastructure/in-memory-log-repository.js';
+import type { Log } from '@/models/log.js';
+import type { LogRepository } from '@/repositories/log.repository.js';
+import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 
 const base = { serviceId: 7, level: 'INFO', timestamp: new Date('2026-11-03T10:00:00Z'), message: 'hi' } as const;
 

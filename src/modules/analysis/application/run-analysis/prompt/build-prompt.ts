@@ -1,5 +1,5 @@
 import type { LlmRequest, NumberedLog } from '@/modules/analysis/domain/llm-client.types.js';
-import type { Log } from '@/modules/logs/domain/log.types.js';
+import type { Log } from '@/models/log.js';
 import { MAX_MESSAGE_CHARS, MAX_METADATA_CHARS, SYSTEM_INSTRUCTION } from './prompt.const.js';
 
 const ELLIPSIS = '…';

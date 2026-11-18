@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getAnalysis } from '@/modules/analysis/application/get-analysis/get-analysis.js';
-import { InMemoryAnalysisRepository } from '@/modules/analysis/infrastructure/in-memory-analysis-repository.js';
+import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
 import { NotFoundError } from '@/shared/errors/not-found-error.js';
 import { analysisId, logId } from '@tests/support/contracts/analysis-repository-contract.js';
 

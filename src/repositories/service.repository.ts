@@ -1,4 +1,4 @@
-import type { Service } from './service.types.js';
+import type { Service } from '@/models/service.js';
 
 export interface ServiceRepository {
   findByApiKey(apiKey: string): Promise<Service | null>;

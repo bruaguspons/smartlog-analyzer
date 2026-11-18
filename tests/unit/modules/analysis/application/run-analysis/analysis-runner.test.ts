@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { AnalysisRunner } from '@/modules/analysis/application/run-analysis/analysis-runner.js';
 import type { AnalysisJob } from '@/modules/analysis/application/run-analysis/process-analysis.types.js';
-import { InMemoryAnalysisRepository } from '@/modules/analysis/infrastructure/in-memory-analysis-repository.js';
+import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
 import { analysisId } from '@tests/support/contracts/analysis-repository-contract.js';
 import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';

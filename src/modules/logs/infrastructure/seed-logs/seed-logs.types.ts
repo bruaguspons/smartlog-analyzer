@@ -1,4 +1,4 @@
-import type { JsonObject, LogLevel } from '@/modules/logs/domain/log.types.js';
+import type { JsonObject, LogLevel } from '@/models/log.js';
 
 export interface SeedLogsDeps {
   newId: () => string;

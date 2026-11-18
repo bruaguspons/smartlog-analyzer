@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { startAnalysis } from '@/modules/analysis/application/start-analysis/start-analysis.js';
 import type { StartAnalysisDeps } from '@/modules/analysis/application/start-analysis/start-analysis.types.js';
-import { InMemoryAnalysisRepository } from '@/modules/analysis/infrastructure/in-memory-analysis-repository.js';
-import { InMemoryLogRepository } from '@/modules/logs/infrastructure/in-memory-log-repository.js';
+import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
+import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import { ConflictError } from '@/shared/errors/conflict-error.js';
 import { UnprocessableError } from '@/shared/errors/unprocessable-error.js';
 import { analysisId } from '@tests/support/contracts/analysis-repository-contract.js';

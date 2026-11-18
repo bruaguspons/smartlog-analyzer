@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LOG_LEVELS, MAX_TRACE_ID_LENGTH } from '@/modules/logs/domain/log.const.js';
+import { LOG_LEVELS, MAX_TRACE_ID_LENGTH } from '@/models/log.js';
 import { jsonValueSchema } from '@/modules/logs/http/log-response/json-value.schema.js';
 import { NO_NUL_MESSAGE } from '@/modules/logs/http/validation/no-nul.const.js';
 import { noNul } from '@/modules/logs/http/validation/no-nul.js';

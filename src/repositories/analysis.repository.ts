@@ -1,4 +1,4 @@
-import type { AnalysisErrorCode, AnalysisView, NewAnalysis, NewFinding, TokenUsage } from './analysis.types.js';
+import type { AnalysisErrorCode, AnalysisView, NewAnalysis, NewFinding, TokenUsage } from '@/models/analysis.js';
 
 export type CreateProcessingOutcome =
   | { created: true }

@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import type { ServiceRepository } from '@/modules/services/domain/service-repository.types.js';
+import type { ServiceRepository } from '@/repositories/service.repository.js';
 import type { LogLevel } from '@/shared/config/config.types.js';
 import type { DatabaseCheck } from '@/shared/http/health/health.types.js';
 

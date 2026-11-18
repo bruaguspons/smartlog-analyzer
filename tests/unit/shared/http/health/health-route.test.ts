@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '@/app/build-app.js';
-import type { ServiceRepository } from '@/modules/services/domain/service-repository.types.js';
+import type { ServiceRepository } from '@/repositories/service.repository.js';
 
 const findByApiKey = vi.fn(() => Promise.resolve(null));
 const repo: ServiceRepository = { findByApiKey, findNamesByIds: () => Promise.resolve(new Map()) };

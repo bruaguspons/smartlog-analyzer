@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@/shared/db/generated/client.js';
-import type { Service } from '@/modules/services/domain/service.types.js';
-import type { ServiceRepository } from '@/modules/services/domain/service-repository.types.js';
+import type { Service } from '@/models/service.js';
+import type { ServiceRepository } from '@/repositories/service.repository.js';
 
 export class PrismaServiceRepository implements ServiceRepository {
   private readonly prisma: PrismaClient;

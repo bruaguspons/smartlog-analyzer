@@ -1,5 +1,5 @@
-import type { JsonObject, LogLevel } from '@/modules/logs/domain/log.types.js';
-import type { LogRepository } from '@/modules/logs/domain/log-repository.types.js';
+import type { JsonObject, LogLevel } from '@/models/log.js';
+import type { LogRepository } from '@/repositories/log.repository.js';
 
 export interface IngestLogCommand {
   /** Resolved from the API key by the caller, never from the request body. */

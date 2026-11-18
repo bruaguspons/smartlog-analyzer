@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { LogCursor } from '@/modules/logs/domain/log-filters.types.js';
+import type { LogCursor } from '@/models/log.js';
 
 const cursorPayloadSchema = z.strictObject({ t: z.iso.datetime(), i: z.uuid() });
 const BASE64URL = /^[A-Za-z0-9_-]+$/;

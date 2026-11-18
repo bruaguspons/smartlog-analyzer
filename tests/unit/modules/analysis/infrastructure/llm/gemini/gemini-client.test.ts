@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildPrompt } from '@/modules/analysis/application/run-analysis/prompt/build-prompt.js';
 import { LlmError } from '@/modules/analysis/domain/llm-error.js';
 import { GeminiClient } from '@/modules/analysis/infrastructure/llm/gemini/gemini-client.js';
-import type { Log } from '@/modules/logs/domain/log.types.js';
+import type { Log } from '@/models/log.js';
 
 const log: Log = {
   id: 'id-1',

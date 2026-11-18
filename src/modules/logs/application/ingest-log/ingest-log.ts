@@ -1,4 +1,4 @@
-import type { Log } from '@/modules/logs/domain/log.types.js';
+import type { Log } from '@/models/log.js';
 import type { IngestLogCommand, IngestLogDeps } from './ingest-log.types.js';
 
 export function ingestLog(cmd: IngestLogCommand, deps: IngestLogDeps): Promise<Log> {

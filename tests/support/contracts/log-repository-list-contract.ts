@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Log } from '@/modules/logs/domain/log.types.js';
-import type { LogRepository } from '@/modules/logs/domain/log-repository.types.js';
+import type { Log } from '@/models/log.js';
+import type { LogRepository } from '@/repositories/log.repository.js';
 
 const uuid = (n: number) => `0192f1c0-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const at = (iso: string) => new Date(iso);

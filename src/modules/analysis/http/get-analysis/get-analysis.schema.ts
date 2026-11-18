@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ANALYSIS_ERROR_CODES, ANALYSIS_STATUSES, FINDING_CATEGORIES, FINDING_SEVERITIES } from '@/modules/analysis/domain/analysis.const.js';
+import { ANALYSIS_ERROR_CODES, ANALYSIS_STATUSES, FINDING_CATEGORIES, FINDING_SEVERITIES } from '@/models/analysis.js';
 
 /** `GET /api/analysis/{id}`. The raw LLM response has no field here, so it can never be serialized. */
 export const analysisResponseSchema = z.object({

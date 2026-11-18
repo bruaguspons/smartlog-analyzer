@@ -1,4 +1,4 @@
-import type { AnalysisErrorCode } from '@/modules/analysis/domain/analysis.types.js';
+import type { AnalysisErrorCode } from '@/models/analysis.js';
 
 /** Terminal outcome of a call that did not succeed, already mapped to the persisted error code. */
 export class LlmCallFailure extends Error {

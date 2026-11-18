@@ -1,10 +1,23 @@
 import type { PrismaClient } from '@/shared/db/generated/client.js';
 import type { LogWhereInput } from '@/shared/db/generated/models/Log.js';
-import type { LogFilters, LogPageRequest } from '@/modules/logs/domain/log-filters.types.js';
-import type { Log } from '@/modules/logs/domain/log.types.js';
-import type { LogCountGroup, LogRepository } from '@/modules/logs/domain/log-repository.types.js';
-import { buildLogWhere } from './build-log-where.js';
-import { toLog } from './to-log.js';
+import type { JsonObject, Log, LogFilters, LogPageRequest } from '@/models/log.js';
+import type { LogCountGroup, LogRepository } from '@/repositories/log.repository.js';
+import { buildLogWhere } from '@/repositories/prisma-log-where.js';
+
+type LogRow = Awaited<ReturnType<PrismaClient['log']['create']>>;
+
+function toLog(row: LogRow): Log {
+  return {
+    id: row.id,
+    serviceId: row.serviceId,
+    level: row.level,
+    timestamp: row.timestamp,
+    message: row.message,
+    traceId: row.traceId,
+    // Written only by this repository from a validated JSON object, so the narrow cast is safe.
+    metadata: row.metadata as JsonObject | null,
+  };
+}
 
 export class PrismaLogRepository implements LogRepository {
   private readonly prisma: PrismaClient;

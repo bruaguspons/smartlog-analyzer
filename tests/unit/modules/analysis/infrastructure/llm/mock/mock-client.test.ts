@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPrompt } from '@/modules/analysis/application/run-analysis/prompt/build-prompt.js';
 import { llmResponseSchema } from '@/modules/analysis/application/llm-response/llm-response.schema.js';
 import { MockClient } from '@/modules/analysis/infrastructure/llm/mock/mock-client.js';
-import type { Log, LogLevel } from '@/modules/logs/domain/log.types.js';
+import type { Log, LogLevel } from '@/models/log.js';
 
 const makeLog = (n: number, level: LogLevel): Log => ({
   id: `id-${n}`,

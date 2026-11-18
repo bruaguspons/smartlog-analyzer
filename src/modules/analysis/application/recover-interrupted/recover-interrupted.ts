@@ -1,5 +1,5 @@
-import type { AnalysisRepository } from '@/modules/analysis/domain/analysis-repository.types.js';
-import type { JobLog } from '@/modules/analysis/domain/job-log.types.js';
+import type { AnalysisRepository } from '@/repositories/analysis.repository.js';
+import type { JobLog } from '@/models/analysis.js';
 
 /**
  * Startup recovery: no job survives a restart, so any PROCESSING row is a leftover of a dead process.

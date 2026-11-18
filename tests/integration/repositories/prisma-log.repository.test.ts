@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
-import type { Log } from '@/modules/logs/domain/log.types.js';
-import { PrismaLogRepository } from '@/modules/logs/infrastructure/prisma-log-repository/prisma-log-repository.js';
+import type { Log } from '@/models/log.js';
+import { PrismaLogRepository } from '@/repositories/prisma-log.repository.js';
 import { createPrismaClient } from '@/shared/db/create-prisma-client.js';
 import { runLogListContract } from '@tests/support/contracts/log-repository-list-contract.js';
 import { runLogStatsContract } from '@tests/support/contracts/log-repository-stats-contract.js';

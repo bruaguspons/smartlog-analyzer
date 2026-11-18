@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FINDING_CATEGORIES, FINDING_SEVERITIES } from '@/modules/analysis/domain/analysis.const.js';
+import { FINDING_CATEGORIES, FINDING_SEVERITIES } from '@/models/analysis.js';
 
 /** Enum-typed shape sent to the model as JSON schema so it is steered towards the closed sets. */
 export const requestedResponseSchema = z.object({

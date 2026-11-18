@@ -1,6 +1,6 @@
 import type { Runtime } from '@/composition/runtime.types.js';
-import { InMemoryAnalysisRepository } from '@/modules/analysis/infrastructure/in-memory-analysis-repository.js';
-import { InMemoryLogRepository } from '@/modules/logs/infrastructure/in-memory-log-repository.js';
+import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
+import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import { analysisId } from '@tests/support/contracts/analysis-repository-contract.js';
 import { makeListLog } from '@tests/support/contracts/log-repository-list-contract.js';
 import { hangUntilAborted, okJson, ScriptedLlmClient, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';

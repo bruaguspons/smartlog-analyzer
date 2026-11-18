@@ -1,7 +1,7 @@
 import { createRuntime } from '@/composition/create-runtime.js';
-import { InMemoryAnalysisRepository } from '@/modules/analysis/infrastructure/in-memory-analysis-repository.js';
-import { InMemoryLogRepository } from '@/modules/logs/infrastructure/in-memory-log-repository.js';
-import { InMemoryServiceRepository } from '@/modules/services/infrastructure/in-memory-service-repository.js';
+import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
+import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
+import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
 import { loadConfig } from '@/shared/config/load-config.js';
 import { ScriptedLlmClient } from '@tests/support/fakes/scripted-llm-client.js';
 import { defaultScript, INACTIVE_KEY, KEY, NOW, OTHER_KEY, seedLogs, type WorldOptions } from './contract-cases.js';
