@@ -8,7 +8,7 @@ import { analysisId, logId } from '@tests/support/fixtures.js';
 import { hangUntilAborted, okJson } from '@tests/support/fakes/scripted-llm-client.js';
 import { resetDatabaseWithService, settleAnalyses } from '@tests/support/integration/database.js';
 import { authHeaders as headers } from '@tests/support/integration/integration-app.js';
-import { scriptedLlm } from '@tests/support/integration/scripted-llm.js';
+import { scriptedLlm } from '@tests/support/fakes/scripted-llm.js';
 
 vi.mock('@/llm/llm.js', async () => (await import('@tests/support/fakes/scripted-llm-module.js')).scriptedLlmModule());
 

@@ -6,7 +6,7 @@ import { prisma } from '@/shared/db/prisma.js';
 import { hangUntilAborted, okJson, type ScriptStep } from '@tests/support/fakes/scripted-llm-client.js';
 import { analysisId, makeLog, makeService } from '@tests/support/fixtures.js';
 import { insertLogs, resetDatabase, settleAnalyses } from '@tests/support/integration/database.js';
-import { scriptedLlm } from '@tests/support/integration/scripted-llm.js';
+import { scriptedLlm } from '@tests/support/fakes/scripted-llm.js';
 
 // Analysis ids come from one counter (the same values as `analysisId(n)`), the clock is fixed and the model is scripted.
 const ids = vi.hoisted(() => ({ counter: 0 }));

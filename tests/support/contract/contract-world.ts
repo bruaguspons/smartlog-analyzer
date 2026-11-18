@@ -2,7 +2,7 @@ import { logRepository } from '@/repositories/log.repository.js';
 import { analysisRunner } from '@/services/analysis-runner.js';
 import { prisma } from '@/shared/db/prisma.js';
 import { insertLogs, resetDatabase } from '@tests/support/integration/database.js';
-import { scriptedLlm } from '@tests/support/integration/scripted-llm.js';
+import { scriptedLlm } from '@tests/support/fakes/scripted-llm.js';
 import { CONTRACT_LOGS, defaultScript, INACTIVE_KEY, KEY, OTHER_KEY, type WorldOptions } from './contract-cases.js';
 
 /**
