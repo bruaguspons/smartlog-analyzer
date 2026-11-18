@@ -9,11 +9,11 @@ flowchart LR
         S2[Microservicio B]
     end
 
-    subgraph App["smartlog-analyzer (Node + Fastify)"]
-        AUTH[Hook de autenticación<br/>X-API-Key]
-        ROUTES[Rutas HTTP<br/>validación con zod]
-        LOGS[Módulo logs]
-        ANA[Módulo análisis]
+    subgraph App["smartlog-analyzer (Node + Express)"]
+        AUTH[Middleware de autenticación<br/>X-API-Key]
+        ROUTES[Rutas y controladores<br/>validación con zod]
+        LOGS[Servicio de logs]
+        ANA[Servicio de análisis]
         RUNNER["Ejecutor de análisis (AnalysisRunner)<br/>asíncrono en proceso"]
         LLM{{LlmClient}}
         GEMINI[GeminiClient]

@@ -58,9 +58,13 @@ Guía oficial: [Using Gemini API keys](https://aistudio.google.com/docs/api-key)
 
 La documentación OpenAPI interactiva está en `/docs` (puerto 3000). Las rutas de la API, salvo `GET /api/health`, requieren el header `X-API-Key`. Los ejemplos de requests y las keys de desarrollo están en [docs/ejemplos-api.md](docs/ejemplos-api.md).
 
+## Estructura
+
+API Express 5 en capas: `src/routes` (tabla de rutas) -> `src/controllers` -> `src/services` -> `src/repositories` (Prisma), con `src/middlewares`, `src/schemas` (zod), `src/models`, `src/llm`, `src/seed`, `src/shared` y `src/composition` (cableado y apagado). El detalle y las alternativas descartadas están en [Estructura del proyecto](ARCHITECTURE.md#estructura-del-proyecto-capas-por-tipo-de-archivo-routes-controllers-services-repositories).
+
 ## Pruebas
 
-- `npm test`: tests unitarios, sin Docker.
+- `npm test`: tests unitarios, sin Docker, con `supertest` sobre la app. Incluyen un test de contrato (`tests/unit/app/api-contract.golden.json`) que fija las respuestas de la API.
 - `npm run test:integration`: Postgres real con Testcontainers (requiere Docker); aplica las migraciones y falla si difieren de `db/schema.prisma`.
 - `npm run lint` y `npm run typecheck`: análisis estático.
 
@@ -68,12 +72,18 @@ La documentación OpenAPI interactiva está en `/docs` (puerto 3000). Las rutas 
 
 Claude Code fue el asistente durante todo el proyecto. El autor definió el alcance y las decisiones de `ARCHITECTURE.md` y revisó cada cambio.
 
+### Migración de Fastify a Express en capas
+
+La primera versión usaba Fastify con módulos hexagonales y una carpeta por caso de uso (unos 145 archivos). El autor decidió pasar a Express 5 con capas simples (routes, controllers, services, repositories) por legibilidad para quien revisa el código. La IA propuso el plan de migración por pasos, escribió el código bajo la dirección del autor y lo hizo en commits chicos.
+
+Para demostrar que la API no cambió, antes de tocar nada se grabó un test de contrato con la respuesta de cada caso (éxitos, errores, rutas desconocidas, bodies inválidos) y el nuevo código tuvo que reproducirlo sin cambios. Qué se descartó: una capa de compatibilidad para seguir usando `inject()` en los tests (se reescribieron con `supertest`) y un middleware de validación genérico que dejaba la entrada como `any` (cada controlador parsea con zod y obtiene tipos). `/docs/yaml` se eliminó y el documento `/docs/json` lo genera ahora otra librería, por lo que su contenido exacto cambió.
+
 ## Trabajo a futuro
 
 - Los análisis corren en el mismo proceso, y un reinicio pierde los que están en curso: se resolvería con una cola persistente.
 - Las API keys están en texto plano y sin rotación: se guardaría un hash y se permitirían varias keys por servicio.
 - No hay autorización por recurso: cualquier servicio lee los logs de todos. Se restringirían las lecturas al propio servicio o a roles de lectura.
-- No hay rate limiting ni ingesta por lotes: se agregaría un endpoint de lotes y `@fastify/rate-limit` por API key.
+- No hay rate limiting ni ingesta por lotes: se agregaría un endpoint de lotes y `express-rate-limit` por API key.
 - No hay política de retención de logs: se particionaría `logs` por fecha.
 - La observabilidad se limita al log estructurado: se agregarían métricas y trazas.
 

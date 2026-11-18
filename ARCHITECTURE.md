@@ -19,10 +19,10 @@ Diagrama: [Vista de componentes](docs/diagrams/components.md).
 
 | Componente                              | Responsabilidad                                                        |
 | --------------------------------------- | ---------------------------------------------------------------------- |
-| Hook de autenticación                   | Resuelve el servicio a partir de `X-API-Key`; `401` si no corresponde. |
-| Rutas HTTP                              | Validan la entrada con zod y traducen los errores.                     |
-| Módulo logs                             | Ingesta, listado con filtros y agregación.                             |
-| Módulo análisis                         | Crea el análisis, selecciona los logs y expone el resultado.           |
+| Middleware de autenticación             | Resuelve el servicio a partir de `X-API-Key`; `401` si no corresponde. |
+| Rutas y controladores                   | Validan la entrada con zod, llaman al servicio y serializan la salida. |
+| Servicio de logs                        | Ingesta, listado con filtros y agregación.                             |
+| Servicio de análisis                    | Crea el análisis, selecciona los logs y expone el resultado.           |
 | Ejecutor de análisis (`AnalysisRunner`) | Arma el prompt, llama al LLM, valida la respuesta y persiste.          |
 | `LlmClient`                             | Interfaz única hacia el LLM; la implementación se elige por entorno.   |
 
@@ -113,17 +113,25 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
 
 ## Decisiones técnicas
 
-### Node + TypeScript + Fastify
+### Node + TypeScript + Express 5
 
-- **Descartado:** Express, NestJS.
-- **Por qué:** Fastify integra validación por esquema, hooks para autenticación y `app.inject()` para tests de integración sin levantar un puerto. Express requiere armar todo eso a mano. NestJS aporta inyección de dependencias y estructura que no se justifican para este alcance.
-- **Consecuencias:** la estructura de módulos la definimos nosotros y hay que documentarla.
+- **Descartado:** Fastify, Express 4, NestJS.
+- **Por qué:** Express es el framework que cualquier revisor ya conoce y su flujo se lee de arriba abajo: la tabla de rutas, el middleware y el controlador. Express 5 propaga a `next` los errores de los handlers async, así que no hace falta una librería extra para eso. Con tres recursos y seis rutas, la estructura de Fastify (plugins encapsulados, type provider, hooks) agregaba más indirección que valor.
+- **Qué se pierde y cómo se compensa:**
+  - Serialización por esquema integrada: cada controlador pasa su respuesta por el esquema zod de respuesta (`sendJson`), que descarta claves desconocidas y evita filtrar campos como `apiKey` o `raw_response`. Si la respuesta no cumple el esquema, es un `500` registrado.
+  - Encapsulación de plugins: la autenticación y el parseo del body se aplican por ruta desde la tabla de rutas (ver [Autenticación y parseo por ruta](#autenticación-y-parseo-por-ruta)), no por scope.
+  - `app.inject()`: los tests usan `supertest` sobre la app (ver [Cómo se prueba](#cómo-se-prueba)).
+- **Descartado:**
+  - Fastify: rinde más por request y trae validación y serialización integradas, pero a esta escala el rendimiento no pesa y la indirección sí.
+  - Express 4: no propaga los errores de handlers async y exigiría `express-async-errors` o un envoltorio propio.
+  - NestJS: aporta inyección de dependencias y estructura que no se justifican para este alcance.
+- **Consecuencias:** la validación, la serialización y el orden de los middlewares los armamos nosotros (unos pocos archivos chicos en `src/middlewares/` y `src/controllers/request-io.ts`). Un test de contrato con la respuesta de cada caso guardada en un archivo (`tests/unit/app/api-contract.golden.json`) fija el comportamiento externo de la API.
 
 ### zod como única fuente de validación y tipos
 
-- **Descartado:** JSON Schema nativo de Fastify (ajv).
-- **Por qué:** con zod el mismo esquema da el tipo de TypeScript y la validación en runtime, y también valida la respuesta del LLM, que es tan poco confiable como un input externo.
-- **Consecuencias:** se usa un type provider de zod para Fastify. ajv sería algo más rápido, pero la diferencia es irrelevante a esta escala.
+- **Descartado:** `express-validator` y `celebrate` (Joi).
+- **Por qué:** con zod el mismo esquema da el tipo de TypeScript y la validación en runtime, y también valida la respuesta del LLM, que es tan poco confiable como un input externo. Además es la fuente del documento OpenAPI.
+- **Consecuencias:** el controlador llama a `parseRequest` con el esquema y obtiene un valor tipado; no hay un middleware genérico de validación que deje el dato como `any`. La diferencia de velocidad frente a otros validadores es irrelevante a esta escala.
 
 ### PostgreSQL
 
@@ -136,7 +144,7 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
 - **Descartado:** procesamiento síncrono; cola externa (RabbitMQ, BullMQ + Redis).
 - **Por qué:** una llamada al LLM puede tardar decenas de segundos y no debería mantener abierto el request. `POST` responde `202` con el id y el cliente consulta el estado. Una cola externa daría reintentos y durabilidad, pero suma infraestructura que no se justifica en el prototipo.
 - **Consecuencias:**
-  - Cierre ordenado: el ejecutor lleva el registro de los análisis en curso. Al recibir `SIGTERM`, aborta cada llamada al LLM (sin más reintentos) y espera a que cada análisis quede en `FAILED` con `error_code = INTERRUPTED`; recién entonces se cierra el pool de la base. Un único hook `onClose` en la raíz de composición (`createRuntime` en `src/composition/create-runtime.ts`) fija ese orden.
+  - Cierre ordenado: el ejecutor lleva el registro de los análisis en curso. Al recibir `SIGTERM`, aborta cada llamada al LLM (sin más reintentos) y espera a que cada análisis quede en `FAILED` con `error_code = INTERRUPTED`; recién entonces se cierra el pool de la base. La raíz de composición (`createRuntime` en `src/composition/create-runtime.ts`) fija ese orden en un único `close()` idempotente: primero `server.close()`, luego `runner.shutdown()` y al final la desconexión de la base. Cada paso va en un `try/catch` con log, así que una falla no impide los siguientes.
   - Caídas: si el proceso muere sin pasar por el cierre ordenado, esos trabajos se pierden. Al arrancar, y antes de aceptar requests, los análisis que quedaron en `PROCESSING` se marcan `FAILED` con `INTERRUPTED`. Así ninguno queda colgado bloqueando nuevos análisis (ver [un solo análisis en curso](#un-solo-análisis-en-curso-a-la-vez)).
   - Escrituras condicionales: toda transición a un estado final es un compare-and-set (`WHERE status = 'PROCESSING'`), así que si compiten el cierre, la recuperación y el ejecutor, gana la primera escritura.
 
@@ -222,7 +230,7 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
   - Una base de test dentro del compose: obliga a levantarla antes de correr los tests y comparte estado entre corridas.
   - Jest en lugar de Vitest: Vitest tiene soporte nativo de TypeScript y ESM, sin configuración extra de transpilación.
 - **Por qué:** Testcontainers levanta un Postgres descartable desde el propio test, así que `npm run test:integration` funciona sin pasos previos y cada corrida empieza con una base limpia. `npm test` corre solo los tests unitarios y no necesita Docker.
-- **Detalle:** la app completa se ejercita vía `app.inject()` con la misma raíz de composición que el servidor (`createRuntime`) y con un cliente de LLM programable (`ScriptedLlmClient`) que fija la respuesta de cada intento.
+- **Detalle:** la app completa se ejercita con `supertest` y la misma raíz de composición que el servidor (`createRuntime`) y con un cliente de LLM programable (`ScriptedLlmClient`) que fija la respuesta de cada intento.
 - **Consecuencias:** la primera corrida de integración es más lenta porque descarga la imagen de Postgres. En CI sirve cualquier runner con Docker.
 
 ### Un solo análisis en curso a la vez
@@ -249,20 +257,25 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
   - La garantía depende de que todo análisis termine en un estado final. El ejecutor envuelve el procesamiento en un `try/finally`: cualquier error no previsto termina en `FAILED` con `INTERNAL_ERROR`, conservando `raw_response` y los tokens si el modelo ya había respondido. La [recuperación al arrancar](#análisis-asíncrono-en-el-mismo-proceso) cubre el caso en que el proceso muere.
   - El throughput es de un análisis a la vez: con los valores por defecto, el peor caso ronda los 2 minutos (ver [Llamada al LLM](#llamada-al-llm)), y los demás pedidos reciben `409` y tienen que reintentar.
 
-### Plugins del ecosistema Fastify: adoptados y descartados
+### Librerías del ecosistema Express: adoptadas y descartadas
 
-- **Adoptados:** `fastify-type-provider-zod` (valida y serializa con zod), `@fastify/swagger` y `@fastify/swagger-ui` (OpenAPI en `/docs`, generado desde los esquemas zod) y `close-with-grace` (apagado ordenado ante señales y errores no capturados, con timeout forzado de 8 s).
-- **Esquemas recursivos en OpenAPI:** la conversión a OpenAPI se hace ruta por ruta y descarta los esquemas zod recursivos que no están registrados, así que el `metadata` JSON se registra con un id (`JsonValue`) para que se publique como componente; sin él, el documento queda con referencias que no resuelven y `/docs` falla.
-- **Descartados**, cada uno por una razón concreta:
-  - `@fastify/rate-limit`: sin un productor de `429` en el alcance; queda como evolución (ver [Limitaciones y evolución](#limitaciones-y-evolución)).
-  - `@fastify/env` y `env-schema`: la configuración ya se valida con zod al arrancar.
-  - `@fastify/sensible`: sus helpers de errores HTTP duplican la jerarquía `AppError` y el handler único.
-  - `@fastify/auth` y `@fastify/bearer-auth`: hay un solo esquema de autenticación y un hook alcanza.
-  - `@fastify/under-pressure`: el [health check](#health-check) cubre el caso.
-  - `@fastify/helmet` y `@fastify/cors`: es una API interna que consumen servicios, no navegadores.
-  - `@fastify/autoload`: con pocos módulos, el registro explícito es más fácil de seguir.
+- **Adoptadas:** `pino-http` (log por request con el `x-request-id` del cliente o un UUID), `@asteasolutions/zod-to-openapi` y `swagger-ui-express` (OpenAPI en `/docs`, generado desde los esquemas zod y la misma tabla de rutas que se monta, así que rutas y documento no se desincronizan) y `close-with-grace` (apagado ordenado ante señales y errores no capturados, con timeout forzado de 8 s).
+- **Esquemas recursivos en OpenAPI:** el `metadata` JSON es un esquema recursivo; se registra con un id (`JsonValue`) para que se publique como componente. Sin él, el documento queda con referencias que no resuelven y `/docs` falla.
+- **Documento OpenAPI:** se sirve en `/docs` (interfaz) y `/docs/json`. No hay `/docs/yaml`.
+- **Descartadas**, cada una por una razón concreta:
+  - `express-rate-limit`: sin un productor de `429` en el alcance; queda como evolución (ver [Limitaciones y evolución](#limitaciones-y-evolución)).
+  - `express-async-errors`: Express 5 ya propaga los errores async.
+  - `zod-express-middleware` y `express-zod-api`: la primera oculta el parseo y la segunda es un framework encima de Express; `parseRequest` son pocas líneas visibles.
+  - `tsoa` y `express-openapi-validator`: el primero exige decoradores y el segundo parte del documento OpenAPI escrito a mano, cuando acá la fuente son los esquemas zod.
+  - `env-schema`: la configuración ya se valida con zod al arrancar.
+  - `helmet` y `cors`: es una API interna que consumen servicios, no navegadores.
 
-El hook de `X-API-Key` vive dentro de un plugin con prefijo `/api`. Una ruta desconocida responde `404` sin autenticar, y lo que se registra fuera de ese scope (`/docs`, `GET /api/health`) es público sin un flag por ruta.
+### Autenticación y parseo por ruta
+
+El middleware de `X-API-Key` y el parseo del body se aplican ruta por ruta desde la tabla de rutas (`src/routes/api.routes.ts`); solo `GET /api/health` está marcada como pública. La cadena de cada ruta es: autenticación, parseo de JSON (solo si tiene body) y controlador.
+
+- **Descartado:** `app.use('/api', auth)` o autenticar a nivel del router, y un `express.json()` global. Un middleware de router convertiría una ruta desconocida bajo `/api` en `401` en lugar de `404`, y un parseo global correría antes de autenticar, con lo que un body inválido o demasiado grande ganaría al `401`.
+- **Consecuencias:** una ruta desconocida responde `404` sin autenticar, y la autenticación siempre precede a la validación del body (`401` antes que `400`, `413` o `415`). Lo que se monta fuera de `/api` (`/docs`) es público.
 
 ### JSON en camelCase en toda la API
 
@@ -270,19 +283,36 @@ El hook de `X-API-Key` vive dentro de un plugin con prefijo `/api`. Una ruta des
 - **Descartado, `snake_case`:** lo recomiendan algunas guías de API y aparece en el legado de OpenTelemetry (`trace_id`). Obliga a mapear nombres en cada request y response, y mezclar ambas convenciones sería peor que cualquiera de las dos.
 - **Consecuencia:** el body de `POST /api/logs` es estricto. Un `trace_id` o un `serviceId` en el body se rechaza con `400`.
 
-### Estructura del proyecto: capas hexagonales por módulo, una carpeta por caso de uso
+### Estructura del proyecto: capas por tipo de archivo (routes, controllers, services, repositories)
 
-- **Decisión:** cada módulo (`logs`, `analysis`, `services`) se divide en cuatro carpetas: `src/modules/<contexto>/domain/` (entidades, constantes y puertos, sin imports hacia afuera), `application/<caso-de-uso>/` (la lógica de cada caso de uso, por ejemplo `ingest-log`, `start-analysis`, `run-analysis`), `http/<caso-de-uso>/` (ruta, esquema zod y constantes propias del adaptador HTTP, con el mismo nombre de carpeta que su caso de uso) e `infrastructure/` (Prisma, LLM, seed). Lo que comparten varios casos de uso va en una carpeta propia por funcionalidad: `application/cursor/`, `application/llm-response/`, `http/log-filters/`, `http/pagination/`, `http/validation/` y `http/log-response/`. Lo que usa un solo caso de uso queda dentro de él (`application/run-analysis/prompt/` y `retry/`). Las dependencias van hacia adentro: `application/` nunca importa de `http/`, `http/` e `infrastructure/` pueden importar de `application/` y `domain/`, y `domain/` no importa de ninguna otra capa. Cada archivo exporta una sola función o clase, con el nombre del símbolo en kebab-case, y los sufijos `.types.ts`, `.const.ts`, `.schema.ts` y `.route.ts` separan tipos, constantes, esquemas zod y rutas. Los tests replican el árbol de `src/` y los dobles de prueba viven en `tests/support/`.
-- **Imports:** `@/` apunta a `src/` (y `@tests/` a `tests/`) mediante `paths` de TypeScript; en el build, `tsc-alias` los reescribe a rutas relativas, y Vitest y `tsx` los resuelven por su cuenta. Dentro de una misma carpeta se usa `./`; nunca `../`.
-- **Por qué:** separar el caso de uso de su adaptador HTTP permite probar la lógica sin Fastify y cambiar el transporte sin tocarla, y el nombre de cada caso de uso sigue visible en las dos capas. Un archivo corto por símbolo hace que el diff de una revisión muestre exactamente lo que cambió.
+- **Decisión:** el código está organizado en carpetas planas por capa, con un archivo por recurso en cada una:
+
+  | Carpeta                 | Contenido                                                                                                                           |
+  | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+  | `src/routes/`           | Tabla de rutas (`api.routes.ts`) y su montaje en Express (`mount-routes.ts`).                                                       |
+  | `src/controllers/`      | Un controlador por recurso (`logs`, `analysis`, `health`) y `request-io.ts` (`parseRequest`, `sendJson`).                           |
+  | `src/middlewares/`      | Autenticación por API key, parseo de JSON y manejo de errores.                                                                      |
+  | `src/schemas/`          | Esquemas zod de entrada y salida de la API, y sus helpers.                                                                          |
+  | `src/services/`         | `LogsService`, `AnalysisService`, el ejecutor de análisis (`AnalysisRunner`) y `process-analysis`. No conocen Express.              |
+  | `src/repositories/`     | Una interfaz por entidad, su implementación Prisma y una en memoria para los tests unitarios. No conocen Express ni los servicios.  |
+  | `src/models/`           | Tipos y constantes de las entidades (`Log`, `Analysis`, `Service`).                                                                 |
+  | `src/llm/`              | `LlmClient`, clientes Gemini y mock, prompt, validación de la respuesta y política de reintentos.                                   |
+  | `src/seed/`             | Código del seed.                                                                                                                    |
+  | `src/shared/`           | Configuración, errores de la aplicación, cursor y cliente de Prisma.                                                                |
+  | `src/app/`              | `createApp` (ajustes de Express, logger, `/docs`, router y manejo de errores) y la generación del documento OpenAPI.                |
+  | `src/composition/`      | `createRuntime`, el cableado con Prisma, el arranque y el apagado.                                                                  |
+
+  Las dependencias van hacia abajo: controladores y rutas usan servicios; servicios usan interfaces de repositorio y modelos; los repositorios usan modelos. Servicios y repositorios no importan Express, ni controladores, rutas o middlewares, y los repositorios tampoco importan servicios. Se divide un archivo solo cuando lo comparte código de otra capa; si no, tipos y constantes viven en el archivo que los usa. Se prioriza la legibilidad por sobre un límite rígido de tamaño. Los tests replican el árbol de `src/` y los dobles de prueba viven en `tests/support/`.
+- **Imports:** `@/` apunta a `src/` (y `@tests/` a `tests/`) mediante `paths` de TypeScript; en el build, `tsc-alias` los reescribe a rutas relativas, y Vitest y `tsx` los resuelven por su cuenta. Dentro de una misma carpeta se usa `./`; nunca `../`. No hay archivos `index.ts` que reexporten.
+- **Por qué:** quien ya conoce una API en capas encuentra cada cosa donde espera, y seguir un request es recorrer cuatro carpetas conocidas. Con tres recursos, cada archivo sigue siendo corto sin necesidad de más subdivisiones.
 - **Descartado:**
-  - Capas en el primer nivel (`controllers/`, `services/`, `repositories/`): dispersa un mismo caso de uso en varias carpetas y mezcla contextos distintos.
-  - Una sola carpeta por caso de uso con lógica, ruta y esquema juntos: la lógica quedaba acoplada al adaptador HTTP y no se veía qué dependencia apunta hacia dónde.
-  - Casos de uso planos dentro de `application/`: mezcla en una sola carpeta archivos de responsabilidades distintas; por eso cada uno tiene su subcarpeta.
+  - Módulos hexagonales (`domain`, `application`, `http`, `infrastructure`) con una carpeta por caso de uso: era la estructura anterior, con unos 145 archivos de pocas líneas. Separaba bien las responsabilidades, pero seguir un request obligaba a abrir muchos archivos y las carpetas y puertos pesaban más que la lógica que contenían.
+  - Carpetas por funcionalidad (`logs/`, `analysis/`) con capas adentro: con tres recursos, no justifica el nivel extra y los servicios se referencian entre sí igual.
+  - Un archivo por símbolo exportado: el diff mostraba cada cambio con precisión, pero repartía una sola idea en varios archivos.
   - Tests junto al código: complica el `include` de Vitest y el build, que tendría que excluirlos de `dist/`.
-  - Tipos en archivos `.d.ts` propios: `skipLibCheck` los omite en la verificación, así que los errores pasarían sin avisar. Se usan `.types.ts`.
+  - Tipos en archivos `.d.ts` propios: `skipLibCheck` los omite en la verificación, así que los errores pasarían sin avisar.
   - Imports nativos `#/` (campo `imports` de `package.json`): exigen condiciones personalizadas en `tsc`, `tsx` y Vitest para apuntar a `src/` en desarrollo y a `dist/` en producción; el alias con `tsc-alias` es más simple.
-- **Consecuencias:** hay más archivos y carpetas; a cambio, cada archivo tiene una sola razón para cambiar. Los dos `LOG_LEVELS` (niveles de pino en `shared/config/env.const.ts` y `DEBUG..FATAL` en `modules/logs/domain/log.const.ts`) conservan su nombre y se distinguen por la ruta.
+- **Consecuencias:** hay dos `LOG_LEVELS`: los niveles de pino en `shared/config/load-config.ts` y `DEBUG..FATAL` en `models/log.ts`; conservan su nombre y se distinguen por la ruta.
 
 ## Manejo de fallas
 
@@ -310,7 +340,7 @@ Todas las respuestas de error tienen la misma forma:
 
 **Descartado:** RFC 9457 (`application/problem+json`). Sería la opción en una API pública, pero para consumidores internos agrega ceremonia (`type` como URI, `title`, `instance`) sin aportar más que un `code` estable.
 
-Un único error handler de Fastify traduce cada error a esta forma. Un 4xx que no es de la aplicación y no tiene código propio (por ejemplo `415` por un `content-type` no soportado) conserva su status y usa `VALIDATION_ERROR`. Los errores no previstos responden `500` con un mensaje genérico: el detalle y el stack trace van solo al log de la aplicación.
+Un único middleware de errores de Express (`src/middlewares/error-handler.ts`) traduce cada error a esta forma. Los errores del parseo de JSON se mapean al mismo sobre: un JSON mal formado es `400` y un body mayor al límite es `413`. Un 4xx que no es de la aplicación y no tiene código propio (por ejemplo `415` por un `content-type` no soportado) conserva su status y usa `VALIDATION_ERROR`. La ruta desconocida pasa por un handler de `404` que lanza `NOT_FOUND` hacia ese mismo middleware. Los errores no previstos responden `500` con un mensaje genérico: el detalle y el stack trace van solo al log de la aplicación.
 
 | HTTP | `code`                 | Cuándo                                                                                                                                |
 | ---- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -367,6 +397,12 @@ Códigos de falla persistidos en `analyses.error_code`:
 
 ### Cómo se prueba
 
+Los tests unitarios (`npm test`) no necesitan Docker: usan repositorios en memoria y `supertest` sobre la app de Express, sin abrir un puerto. Tres capas de tests los complementan:
+
+- **Test de contrato:** `tests/unit/app/api-contract.test.ts` ejecuta una matriz de requests (éxitos, `401`, `404`, validación, JSON mal formado, `413`, `415`, `409`, `422`, `503`) y compara status, `content-type` y body con `tests/unit/app/api-contract.golden.json`. Cualquier cambio visible de la API aparece como diff en ese archivo. Se grabó antes de migrar de Fastify a Express y el cambio de framework no lo modificó.
+- **Contratos de repositorio:** la misma batería de casos (`tests/support/contracts/`) corre contra la implementación en memoria y, en los tests de integración, contra la de Prisma, para que no diverjan.
+- **Integración con Testcontainers:** ver [Tests de integración contra un Postgres real con Testcontainers](#tests-de-integración-contra-un-postgres-real-con-testcontainers).
+
 Los tres casos que pide el enunciado se cubren con el cliente programable y timers falsos, para que los tests de timeout y backoff no esperen en tiempo real:
 
 | Caso                             | Resultado esperado                                                             |
@@ -422,7 +458,7 @@ La configuración se valida con zod al arrancar. Si falta algo obligatorio o tie
 | Los mensajes de log son texto no confiable en el prompt. | Prompt injection: un log puede contener instrucciones para el modelo.     | Hoy se mitiga delimitando los logs, pidiendo salida con esquema y validando con zod. No es una protección completa. |
 | Un solo análisis en curso a la vez.                      | La mayoría de los pedidos recibe `409` y tiene que reintentar.            | Una cola con concurrencia configurable.                                                                             |
 | Un análisis cubre una sola página, de hasta 200 logs.    | Un incidente grande no se ve completo en un análisis.                     | Analizar por lotes y combinar los resúmenes en un análisis final.                                                   |
-| Ingesta de un log por request y sin límite de tasa.      | Un servicio ruidoso puede saturar la API.                                 | Ingesta por lotes y rate limiting por API key (`@fastify/rate-limit`).                                              |
+| Ingesta de un log por request y sin límite de tasa.      | Un servicio ruidoso puede saturar la API.                                 | Ingesta por lotes y rate limiting por API key (`express-rate-limit`).                                              |
 | Sin política de retención.                               | La tabla `logs` crece sin límite.                                         | Particionar `logs` por fecha y eliminar particiones viejas; a gran volumen, Elasticsearch o Loki.                   |
 | Agrupación fija en `stats`.                              | No responde preguntas como "errores por hora".                            | Agrupaciones configurables e intervalos de tiempo con `$queryRaw`.                                                  |
 | Observabilidad limitada al log estructurado (pino).      | No hay métricas de latencia, fallas del LLM ni costo acumulado.           | Métricas para Prometheus y trazas con OpenTelemetry; tokens y duración ya están en `analyses`.                      |
