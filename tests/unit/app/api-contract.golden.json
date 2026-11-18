@@ -1,0 +1,1324 @@
+{
+  "health ok without key": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "status": "ok",
+      "database": "ok"
+    }
+  },
+  "health ok with a bad key": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "status": "ok",
+      "database": "ok"
+    }
+  },
+  "health HEAD": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": ""
+  },
+  "health 503 when the database is down": {
+    "status": 503,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "SERVICE_UNAVAILABLE",
+        "message": "Database unreachable",
+        "details": {
+          "database": "unreachable"
+        }
+      }
+    }
+  },
+  "ingest 201": {
+    "status": 201,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "id": "0192f1c0-cccc-7000-8000-000000000001",
+      "serviceId": 7,
+      "level": "ERROR",
+      "timestamp": "2026-11-04T08:00:00.000Z",
+      "message": "boom",
+      "traceId": "t-1",
+      "metadata": {
+        "a": 1,
+        "nested": {
+          "b": [
+            1,
+            "x",
+            null
+          ]
+        }
+      }
+    }
+  },
+  "ingest 201 with the other service key": {
+    "status": 201,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "id": "0192f1c0-cccc-7000-8000-000000000001",
+      "serviceId": 8,
+      "level": "DEBUG",
+      "timestamp": "2026-11-04T06:00:00.000Z",
+      "message": "m",
+      "traceId": null,
+      "metadata": null
+    }
+  },
+  "list default": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "items": [
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000004",
+          "serviceId": 8,
+          "level": "WARN",
+          "timestamp": "2026-11-03T10:00:04.000Z",
+          "message": "message 4",
+          "traceId": null,
+          "metadata": null
+        },
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000003",
+          "serviceId": 7,
+          "level": "ERROR",
+          "timestamp": "2026-11-03T10:00:03.000Z",
+          "message": "message 3",
+          "traceId": null,
+          "metadata": null
+        },
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000002",
+          "serviceId": 7,
+          "level": "INFO",
+          "timestamp": "2026-11-03T10:00:02.000Z",
+          "message": "message 2",
+          "traceId": null,
+          "metadata": null
+        },
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000001",
+          "serviceId": 7,
+          "level": "ERROR",
+          "timestamp": "2026-11-03T10:00:01.000Z",
+          "message": "message 1",
+          "traceId": "trace-1",
+          "metadata": {
+            "attempt": 1
+          }
+        }
+      ],
+      "nextCursor": null,
+      "hasMore": false
+    }
+  },
+  "list HEAD": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": ""
+  },
+  "list filtered by service, level, dates, trace and search": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "items": [
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000001",
+          "serviceId": 7,
+          "level": "ERROR",
+          "timestamp": "2026-11-03T10:00:01.000Z",
+          "message": "message 1",
+          "traceId": "trace-1",
+          "metadata": {
+            "attempt": 1
+          }
+        }
+      ],
+      "nextCursor": null,
+      "hasMore": false
+    }
+  },
+  "list coerces limit": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "items": [
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000004",
+          "serviceId": 8,
+          "level": "WARN",
+          "timestamp": "2026-11-03T10:00:04.000Z",
+          "message": "message 4",
+          "traceId": null,
+          "metadata": null
+        },
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000003",
+          "serviceId": 7,
+          "level": "ERROR",
+          "timestamp": "2026-11-03T10:00:03.000Z",
+          "message": "message 3",
+          "traceId": null,
+          "metadata": null
+        }
+      ],
+      "nextCursor": "eyJ0IjoiMjAyNi0xMS0wM1QxMDowMDowMy4wMDBaIiwiaSI6IjAxOTJmMWMwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMyJ9",
+      "hasMore": true
+    }
+  },
+  "list second page from a cursor": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "items": [
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000002",
+          "serviceId": 7,
+          "level": "INFO",
+          "timestamp": "2026-11-03T10:00:02.000Z",
+          "message": "message 2",
+          "traceId": null,
+          "metadata": null
+        },
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000001",
+          "serviceId": 7,
+          "level": "ERROR",
+          "timestamp": "2026-11-03T10:00:01.000Z",
+          "message": "message 1",
+          "traceId": "trace-1",
+          "metadata": {
+            "attempt": 1
+          }
+        }
+      ],
+      "nextCursor": null,
+      "hasMore": false
+    }
+  },
+  "list level repeated": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "items": [
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000003",
+          "serviceId": 7,
+          "level": "ERROR",
+          "timestamp": "2026-11-03T10:00:03.000Z",
+          "message": "message 3",
+          "traceId": null,
+          "metadata": null
+        },
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000002",
+          "serviceId": 7,
+          "level": "INFO",
+          "timestamp": "2026-11-03T10:00:02.000Z",
+          "message": "message 2",
+          "traceId": null,
+          "metadata": null
+        },
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000001",
+          "serviceId": 7,
+          "level": "ERROR",
+          "timestamp": "2026-11-03T10:00:01.000Z",
+          "message": "message 1",
+          "traceId": "trace-1",
+          "metadata": {
+            "attempt": 1
+          }
+        }
+      ],
+      "nextCursor": null,
+      "hasMore": false
+    }
+  },
+  "list level in brackets": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/ Unrecognized key: \"level[]\"",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "unrecognized_keys",
+            "message": "Unrecognized key: \"level[]\""
+          }
+        ]
+      }
+    }
+  },
+  "list nested query key": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/ Unrecognized key: \"a[b]\"",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "unrecognized_keys",
+            "message": "Unrecognized key: \"a[b]\""
+          }
+        ]
+      }
+    }
+  },
+  "list 21 repeated levels": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "items": [
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000003",
+          "serviceId": 7,
+          "level": "ERROR",
+          "timestamp": "2026-11-03T10:00:03.000Z",
+          "message": "message 3",
+          "traceId": null,
+          "metadata": null
+        },
+        {
+          "id": "0192f1c0-0000-7000-8000-000000000001",
+          "serviceId": 7,
+          "level": "ERROR",
+          "timestamp": "2026-11-03T10:00:01.000Z",
+          "message": "message 1",
+          "traceId": "trace-1",
+          "metadata": {
+            "attempt": 1
+          }
+        }
+      ],
+      "nextCursor": null,
+      "hasMore": false
+    }
+  },
+  "stats 200": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "total": 4,
+      "groups": [
+        {
+          "service": {
+            "id": 7,
+            "name": "payments-api"
+          },
+          "level": "INFO",
+          "count": 1
+        },
+        {
+          "service": {
+            "id": 7,
+            "name": "payments-api"
+          },
+          "level": "ERROR",
+          "count": 2
+        },
+        {
+          "service": {
+            "id": 8,
+            "name": "orders-api"
+          },
+          "level": "WARN",
+          "count": 1
+        }
+      ]
+    }
+  },
+  "stats filtered": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "total": 3,
+      "groups": [
+        {
+          "service": {
+            "id": 7,
+            "name": "payments-api"
+          },
+          "level": "INFO",
+          "count": 1
+        },
+        {
+          "service": {
+            "id": 7,
+            "name": "payments-api"
+          },
+          "level": "ERROR",
+          "count": 2
+        }
+      ]
+    }
+  },
+  "analyze 202": {
+    "status": 202,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "id": "0192f1c0-cccc-7000-8000-000000000001",
+      "hasMore": false,
+      "nextCursor": null
+    }
+  },
+  "analyze 202 with filters in the body": {
+    "status": 202,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "id": "0192f1c0-cccc-7000-8000-000000000001",
+      "hasMore": true,
+      "nextCursor": "eyJ0IjoiMjAyNi0xMS0wM1QxMDowMDowMy4wMDBaIiwiaSI6IjAxOTJmMWMwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMyJ9"
+    }
+  },
+  "get analysis completed": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "id": "0192f1c0-cccc-7000-8000-000000000001",
+      "status": "COMPLETED",
+      "createdAt": "2026-11-04T12:00:00.000Z",
+      "durationMs": 0,
+      "logCount": 4,
+      "provider": "scripted",
+      "model": "scripted-model",
+      "summary": "Database connection problems",
+      "findings": [
+        {
+          "id": 1,
+          "category": "DATABASE",
+          "severity": "HIGH",
+          "description": "Connection pool exhausted",
+          "suggestions": [
+            "Increase the pool size"
+          ],
+          "logIds": [
+            "0192f1c0-0000-7000-8000-000000000004",
+            "0192f1c0-0000-7000-8000-000000000003"
+          ]
+        }
+      ],
+      "tokens": {
+        "prompt": 10,
+        "completion": 5
+      },
+      "error": null
+    }
+  },
+  "get analysis processing": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "id": "0192f1c0-cccc-7000-8000-000000000001",
+      "status": "PROCESSING",
+      "createdAt": "2026-11-04T12:00:00.000Z",
+      "durationMs": null,
+      "logCount": 4,
+      "provider": "scripted",
+      "model": "scripted-model",
+      "summary": null,
+      "findings": [],
+      "tokens": null,
+      "error": null
+    }
+  },
+  "get analysis unknown id": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Analysis not found"
+      }
+    }
+  },
+  "get analysis id is not a uuid": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "params/id Invalid UUID",
+        "details": [
+          {
+            "instancePath": "/id",
+            "keyword": "invalid_format",
+            "message": "Invalid UUID"
+          }
+        ]
+      }
+    }
+  },
+  "analyze 409 while another analysis runs": {
+    "status": 409,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "ANALYSIS_IN_PROGRESS",
+        "message": "Another analysis is already in progress",
+        "details": {
+          "id": "0192f1c0-cccc-7000-8000-000000000001"
+        }
+      }
+    }
+  },
+  "analyze 422 without matching logs": {
+    "status": 422,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NO_LOGS_TO_ANALYZE",
+        "message": "The filters match no logs to analyze"
+      }
+    }
+  },
+  "401 without key": {
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid or missing API key"
+      }
+    }
+  },
+  "401 with an empty key": {
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid or missing API key"
+      }
+    }
+  },
+  "401 with an unknown key": {
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid or missing API key"
+      }
+    }
+  },
+  "401 with an inactive service key": {
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid or missing API key"
+      }
+    }
+  },
+  "401 with a key that is too long": {
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid or missing API key"
+      }
+    }
+  },
+  "401 beats an invalid body": {
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid or missing API key"
+      }
+    }
+  },
+  "401 beats an oversized body": {
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid or missing API key"
+      }
+    }
+  },
+  "401 beats an unsupported content type": {
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Invalid or missing API key"
+      }
+    }
+  },
+  "404 root": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "404 unknown path without key": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "404 unknown api path without key": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "404 unknown api path with key": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "404 unknown docs path": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "404 trailing slash": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "404 upper case path": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "404 method not allowed": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "404 unknown route with malformed json and key": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Body is not valid JSON but content-type is set to 'application/json'"
+      }
+    }
+  },
+  "404 unknown route with malformed json without key": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Body is not valid JSON but content-type is set to 'application/json'"
+      }
+    }
+  },
+  "unknown route with a valid json body": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "unknown route with an empty json body": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Body cannot be empty when content-type is set to 'application/json'"
+      }
+    }
+  },
+  "unknown route with an unsupported content type": {
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Route not found"
+      }
+    }
+  },
+  "unknown route with a body over 1 MiB": {
+    "status": 413,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "PAYLOAD_TOO_LARGE",
+        "message": "Request body is too large"
+      }
+    }
+  },
+  "unknown route outside api with malformed json": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Body is not valid JSON but content-type is set to 'application/json'"
+      }
+    }
+  },
+  "ingest invalid level": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/level Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\"",
+        "details": [
+          {
+            "instancePath": "/level",
+            "keyword": "invalid_value",
+            "message": "Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\""
+          }
+        ]
+      }
+    }
+  },
+  "ingest unknown key serviceId": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/ Unrecognized key: \"serviceId\"",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "unrecognized_keys",
+            "message": "Unrecognized key: \"serviceId\""
+          }
+        ]
+      }
+    }
+  },
+  "ingest several issues": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/level Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\", body/timestamp Invalid ISO datetime, body/message Too small: expected string to have >=1 characters",
+        "details": [
+          {
+            "instancePath": "/level",
+            "keyword": "invalid_value",
+            "message": "Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\""
+          },
+          {
+            "instancePath": "/timestamp",
+            "keyword": "invalid_format",
+            "message": "Invalid ISO datetime"
+          },
+          {
+            "instancePath": "/message",
+            "keyword": "too_small",
+            "message": "Too small: expected string to have >=1 characters"
+          }
+        ]
+      }
+    }
+  },
+  "ingest missing everything": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/level Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\", body/timestamp Invalid input: expected string, received undefined, body/message Invalid input: expected string, received undefined",
+        "details": [
+          {
+            "instancePath": "/level",
+            "keyword": "invalid_value",
+            "message": "Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\""
+          },
+          {
+            "instancePath": "/timestamp",
+            "keyword": "invalid_type",
+            "message": "Invalid input: expected string, received undefined"
+          },
+          {
+            "instancePath": "/message",
+            "keyword": "invalid_type",
+            "message": "Invalid input: expected string, received undefined"
+          }
+        ]
+      }
+    }
+  },
+  "ingest array body (root-level issue)": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/ Invalid input: expected object, received array",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "invalid_type",
+            "message": "Invalid input: expected object, received array"
+          }
+        ]
+      }
+    }
+  },
+  "ingest null body": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/ Invalid input: expected object, received null",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "invalid_type",
+            "message": "Invalid input: expected object, received null"
+          }
+        ]
+      }
+    }
+  },
+  "ingest timestamp in the future": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/timestamp timestamp must not be more than 5 minutes in the future",
+        "details": [
+          {
+            "instancePath": "/timestamp",
+            "keyword": "custom",
+            "message": "timestamp must not be more than 5 minutes in the future"
+          }
+        ]
+      }
+    }
+  },
+  "ingest NUL in the message": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/message must not contain NUL (U+0000) characters",
+        "details": [
+          {
+            "instancePath": "/message",
+            "keyword": "custom",
+            "message": "must not contain NUL (U+0000) characters"
+          }
+        ]
+      }
+    }
+  },
+  "ingest NUL in a metadata key": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/metadata metadata must not contain NUL (U+0000) characters",
+        "details": [
+          {
+            "instancePath": "/metadata",
+            "keyword": "custom",
+            "message": "metadata must not contain NUL (U+0000) characters"
+          }
+        ]
+      }
+    }
+  },
+  "ingest metadata with a non-JSON value": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/metadata Invalid input: expected record, received array",
+        "details": [
+          {
+            "instancePath": "/metadata",
+            "keyword": "invalid_type",
+            "message": "Invalid input: expected record, received array"
+          }
+        ]
+      }
+    }
+  },
+  "list invalid level": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/level/0 Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\"",
+        "details": [
+          {
+            "instancePath": "/level/0",
+            "keyword": "invalid_value",
+            "message": "Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\""
+          }
+        ]
+      }
+    }
+  },
+  "list limit above the maximum": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/limit Too big: expected number to be <=200",
+        "details": [
+          {
+            "instancePath": "/limit",
+            "keyword": "too_big",
+            "message": "Too big: expected number to be <=200"
+          }
+        ]
+      }
+    }
+  },
+  "list limit is not a number": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/limit Invalid input: expected number, received NaN",
+        "details": [
+          {
+            "instancePath": "/limit",
+            "keyword": "invalid_type",
+            "message": "Invalid input: expected number, received NaN"
+          }
+        ]
+      }
+    }
+  },
+  "list bad date": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/from Invalid ISO datetime",
+        "details": [
+          {
+            "instancePath": "/from",
+            "keyword": "invalid_format",
+            "message": "Invalid ISO datetime"
+          }
+        ]
+      }
+    }
+  },
+  "list from after to": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/from from must not be after to",
+        "details": [
+          {
+            "instancePath": "/from",
+            "keyword": "custom",
+            "message": "from must not be after to"
+          }
+        ]
+      }
+    }
+  },
+  "list serviceId is not a number": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/serviceId Invalid input: expected number, received NaN",
+        "details": [
+          {
+            "instancePath": "/serviceId",
+            "keyword": "invalid_type",
+            "message": "Invalid input: expected number, received NaN"
+          }
+        ]
+      }
+    }
+  },
+  "list serviceId above Int4": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/serviceId Too big: expected number to be <=2147483647",
+        "details": [
+          {
+            "instancePath": "/serviceId",
+            "keyword": "too_big",
+            "message": "Too big: expected number to be <=2147483647"
+          }
+        ]
+      }
+    }
+  },
+  "list NUL in search": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/search must not contain NUL (U+0000) characters",
+        "details": [
+          {
+            "instancePath": "/search",
+            "keyword": "custom",
+            "message": "must not contain NUL (U+0000) characters"
+          }
+        ]
+      }
+    }
+  },
+  "list unknown query key": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/ Unrecognized key: \"foo\"",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "unrecognized_keys",
+            "message": "Unrecognized key: \"foo\""
+          }
+        ]
+      }
+    }
+  },
+  "list tampered cursor": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/cursor invalid cursor",
+        "details": [
+          {
+            "instancePath": "/cursor",
+            "keyword": "custom",
+            "message": "invalid cursor"
+          }
+        ]
+      }
+    }
+  },
+  "stats rejects limit": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/ Unrecognized key: \"limit\"",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "unrecognized_keys",
+            "message": "Unrecognized key: \"limit\""
+          }
+        ]
+      }
+    }
+  },
+  "stats rejects cursor": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "querystring/ Unrecognized key: \"cursor\"",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "unrecognized_keys",
+            "message": "Unrecognized key: \"cursor\""
+          }
+        ]
+      }
+    }
+  },
+  "analyze invalid body": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/level/0 Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\", body/limit Too big: expected number to be <=200",
+        "details": [
+          {
+            "instancePath": "/level/0",
+            "keyword": "invalid_value",
+            "message": "Invalid option: expected one of \"DEBUG\"|\"INFO\"|\"WARN\"|\"ERROR\"|\"FATAL\""
+          },
+          {
+            "instancePath": "/limit",
+            "keyword": "too_big",
+            "message": "Too big: expected number to be <=200"
+          }
+        ]
+      }
+    }
+  },
+  "analyze body with an unknown key": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/ Unrecognized key: \"foo\"",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "unrecognized_keys",
+            "message": "Unrecognized key: \"foo\""
+          }
+        ]
+      }
+    }
+  },
+  "malformed json": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Body is not valid JSON but content-type is set to 'application/json'"
+      }
+    }
+  },
+  "empty body with json content type": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Body cannot be empty when content-type is set to 'application/json'"
+      }
+    }
+  },
+  "body without content type": {
+    "status": 415,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Unsupported Media Type"
+      }
+    }
+  },
+  "no body and no content type": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/ Invalid input: expected object, received null",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "invalid_type",
+            "message": "Invalid input: expected object, received null"
+          }
+        ]
+      }
+    }
+  },
+  "unsupported content type": {
+    "status": 415,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Unsupported Media Type"
+      }
+    }
+  },
+  "json content type with a charset": {
+    "status": 201,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "id": "0192f1c0-cccc-7000-8000-000000000001",
+      "serviceId": 7,
+      "level": "ERROR",
+      "timestamp": "2026-11-04T08:00:00.000Z",
+      "message": "boom",
+      "traceId": "t-1",
+      "metadata": {
+        "a": 1,
+        "nested": {
+          "b": [
+            1,
+            "x",
+            null
+          ]
+        }
+      }
+    }
+  },
+  "json content type in upper case": {
+    "status": 201,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "id": "0192f1c0-cccc-7000-8000-000000000001",
+      "serviceId": 7,
+      "level": "ERROR",
+      "timestamp": "2026-11-04T08:00:00.000Z",
+      "message": "boom",
+      "traceId": "t-1",
+      "metadata": {
+        "a": 1,
+        "nested": {
+          "b": [
+            1,
+            "x",
+            null
+          ]
+        }
+      }
+    }
+  },
+  "vendor json content type": {
+    "status": 415,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Unsupported Media Type"
+      }
+    }
+  },
+  "text/plain content type": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "body/ Invalid input: expected object, received string",
+        "details": [
+          {
+            "instancePath": "/",
+            "keyword": "invalid_type",
+            "message": "Invalid input: expected object, received string"
+          }
+        ]
+      }
+    }
+  },
+  "body over 1 MiB": {
+    "status": 413,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "PAYLOAD_TOO_LARGE",
+        "message": "Request body is too large"
+      }
+    }
+  },
+  "__proto__ in the body": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Body is not valid JSON but content-type is set to 'application/json'"
+      }
+    }
+  },
+  "constructor.prototype in the body": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Body is not valid JSON but content-type is set to 'application/json'"
+      }
+    }
+  },
+  "__proto__ inside metadata": {
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Body is not valid JSON but content-type is set to 'application/json'"
+      }
+    }
+  },
+  "500 hides the internal error": {
+    "status": 500,
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "error": {
+        "code": "INTERNAL_ERROR",
+        "message": "Internal server error"
+      }
+    }
+  }
+}
