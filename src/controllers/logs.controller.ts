@@ -1,5 +1,12 @@
 import type { RequestHandler } from 'express';
-import { ingestLogBodySchema, listLogsQuerySchema, logResponseSchema, listLogsResponseSchema, logStatsQuerySchema, logStatsResponseSchema } from '@/schemas/logs.schema.js';
+import {
+  ingestLogBodySchema,
+  listLogsQuerySchema,
+  logResponseSchema,
+  listLogsResponseSchema,
+  logStatsQuerySchema,
+  logStatsResponseSchema,
+} from '@/schemas/logs.schema.js';
 import { logsService } from '@/services/logs.service.js';
 import { parseRequest, sendJson } from './request-io.js';
 

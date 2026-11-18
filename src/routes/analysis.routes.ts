@@ -2,7 +2,12 @@ import { Router } from 'express';
 import { analysisController } from '@/controllers/analysis.controller.js';
 import { parseJsonBody } from '@/middlewares/parse-json-body.js';
 import { requireApiKey } from '@/middlewares/require-api-key.js';
-import { analysisIdParamsSchema, analysisResponseSchema, analyzeBodySchema, analyzeResponseSchema } from '@/schemas/analysis.schema.js';
+import {
+  analysisIdParamsSchema,
+  analysisResponseSchema,
+  analyzeBodySchema,
+  analyzeResponseSchema,
+} from '@/schemas/analysis.schema.js';
 import { documentRoute } from './openapi.js';
 
 export const analysisRouter = Router({ strict: true, caseSensitive: true });

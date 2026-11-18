@@ -2,7 +2,14 @@ import { Router } from 'express';
 import { logsController } from '@/controllers/logs.controller.js';
 import { parseJsonBody } from '@/middlewares/parse-json-body.js';
 import { requireApiKey } from '@/middlewares/require-api-key.js';
-import { ingestLogBodySchema, listLogsQuerySchema, listLogsResponseSchema, logResponseSchema, logStatsQuerySchema, logStatsResponseSchema } from '@/schemas/logs.schema.js';
+import {
+  ingestLogBodySchema,
+  listLogsQuerySchema,
+  listLogsResponseSchema,
+  logResponseSchema,
+  logStatsQuerySchema,
+  logStatsResponseSchema,
+} from '@/schemas/logs.schema.js';
 import { documentRoute } from './openapi.js';
 
 export const logsRouter = Router({ strict: true, caseSensitive: true });

@@ -1,5 +1,10 @@
 import type { RequestHandler } from 'express';
-import { analysisIdParamsSchema, analysisResponseSchema, analyzeBodySchema, analyzeResponseSchema } from '@/schemas/analysis.schema.js';
+import {
+  analysisIdParamsSchema,
+  analysisResponseSchema,
+  analyzeBodySchema,
+  analyzeResponseSchema,
+} from '@/schemas/analysis.schema.js';
 import { analysisService } from '@/services/analysis.service.js';
 import { parseRequest, sendJson } from './request-io.js';
 
