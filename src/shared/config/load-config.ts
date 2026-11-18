@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
-const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
+const PINO_LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 const LLM_PROVIDERS = ['mock', 'gemini'] as const;
 const MOCK_BEHAVIORS = ['normal', 'invalid', 'timeout'] as const;
 const MAX_LLM_RETRIES = 10;
 
-export type LogLevel = (typeof LOG_LEVELS)[number];
+export type PinoLogLevel = (typeof PINO_LOG_LEVELS)[number];
 
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
@@ -14,7 +14,7 @@ export type MockBehavior = (typeof MOCK_BEHAVIORS)[number];
 export interface Config {
   port: number;
   host: string;
-  logLevel: LogLevel;
+  logLevel: PinoLogLevel;
   databaseUrl: string;
   seedOnStart: boolean;
   llm: {
@@ -44,7 +44,7 @@ const EnvSchema = z
     // An empty string coerces to 0 and is rejected by min(1).
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     HOST: z.string().min(1).default('0.0.0.0'),
-    LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+    LOG_LEVEL: z.enum(PINO_LOG_LEVELS).default('info'),
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     SEED_ON_START: z.stringbool().default(true),
     LLM_PROVIDER: z.enum(LLM_PROVIDERS).default('mock'),
@@ -53,9 +53,9 @@ const EnvSchema = z
     LLM_MODEL: z.string().min(1).default('gemini-3.6-flash'),
     // Per-attempt timeout. An empty string coerces to 0 and is rejected by min(1).
     LLM_TIMEOUT_MS: z.coerce.number().int().min(1).default(30_000),
-    // Retries after the first attempt; 0 means a single attempt. The regex rejects '' (which would coerce to 0).
     // Dev-only knob of the mock provider: `invalid` answers with non-JSON, `timeout` hangs until aborted.
     LLM_MOCK_BEHAVIOR: z.enum(MOCK_BEHAVIORS).default('normal'),
+    // Retries after the first attempt; 0 means a single attempt. The regex rejects '' (which would coerce to 0).
     LLM_MAX_RETRIES: z
       .string()
       .regex(/^\d+$/)

@@ -125,7 +125,7 @@ La consulta de agregación está en [Agregación expuesta como `GET /api/logs/st
   - Fastify: rinde más por request y trae validación y serialización integradas, pero a esta escala el rendimiento no pesa y la indirección sí.
   - Express 4: no propaga los errores de handlers async y exigiría `express-async-errors` o un envoltorio propio.
   - NestJS: aporta inyección de dependencias y estructura que no se justifican para este alcance.
-- **Consecuencias:** la validación, la serialización y el orden de los middlewares los armamos nosotros (unos pocos archivos chicos en `src/middlewares/` y `src/controllers/request-io.ts`). Un test de contrato con la respuesta de cada caso guardada en un archivo (`tests/unit/app/api-contract.golden.json`) fija el comportamiento externo de la API.
+- **Consecuencias:** la validación, la serialización y el orden de los middlewares los armamos nosotros (unos pocos archivos chicos en `src/middlewares/` y `src/controllers/request-io.ts`). Un test de contrato con la respuesta de cada caso guardada en un archivo (`tests/integration/api/api-contract.golden.json`) fija el comportamiento externo de la API.
 
 ### zod como única fuente de validación y tipos
 
@@ -323,7 +323,7 @@ El middleware de `X-API-Key` y el parseo del body se aplican ruta por ruta en lo
   - Tests junto al código: complica el `include` de Vitest y el build, que tendría que excluirlos de `dist/`.
   - Tipos en archivos `.d.ts` propios: `skipLibCheck` los omite en la verificación, así que los errores pasarían sin avisar.
   - Imports nativos `#/` (campo `imports` de `package.json`): exigen condiciones personalizadas en `tsc`, `tsx` y Vitest para apuntar a `src/` en desarrollo y a `dist/` en producción; el alias con `tsc-alias` es más simple.
-- **Consecuencias:** hay dos `LOG_LEVELS`: los niveles de pino en `shared/config/load-config.ts` y `DEBUG..FATAL` en `models/log.ts`; conservan su nombre y se distinguen por la ruta.
+- **Consecuencias:** los niveles de pino se llaman `PINO_LOG_LEVELS` y `PinoLogLevel` (en `shared/config/load-config.ts`) para no confundirlos con `LOG_LEVELS` y `LogLevel` (`DEBUG..FATAL`, en `models/log.ts`).
 
 ## Manejo de fallas
 
