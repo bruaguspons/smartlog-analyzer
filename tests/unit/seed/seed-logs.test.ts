@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOG_LEVELS } from '@/models/log.js';
-import { FROM_EXAMPLE, TO_EXAMPLE } from '@/modules/logs/http/log-filters/log-filters.const.js';
+import { FROM_EXAMPLE, TO_EXAMPLE } from '@/schemas/log-filters.schema.js';
 import { SAMPLE_LOG_COUNT, SAMPLE_LOGS_END } from '@/seed/sample-logs.const.js';
 import { buildSampleLogs, type SampleServiceIds } from '@/seed/seed-logs.js';
 

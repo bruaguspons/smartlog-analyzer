@@ -1,4 +1,4 @@
-import type { Runtime } from '@/composition/runtime.types.js';
+import type { AnalysisRunner } from '@/services/analysis-runner.js';
 import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
 import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import { analysisId } from '@tests/support/contracts/analysis-repository-contract.js';
@@ -25,8 +25,8 @@ export interface ContractReply {
 }
 
 export interface ContractWorld {
-  /** The runtime under test; its in-memory fakes are exposed so a case can arrange state. */
-  runtime: Runtime;
+  /** The app under test: its runner and in-memory fakes are exposed so a case can arrange state. */
+  runner: Pick<AnalysisRunner, 'idle'>;
   logRepo: InMemoryLogRepository;
   analysisRepo: InMemoryAnalysisRepository;
   llm: ScriptedLlmClient;
@@ -126,9 +126,9 @@ export const CONTRACT_CASES: ContractCase[] = [
   simple('analyze 202 with filters in the body', post('/api/logs/analyze', JSON.stringify({ serviceId: 7, level: ['ERROR'], limit: 1 }))),
   {
     name: 'get analysis completed',
-    run: async ({ send, runtime }) => {
+    run: async ({ send, runner }) => {
       const started = await send(post('/api/logs/analyze', '{}'));
-      await runtime.runner.idle();
+      await runner.idle();
       return send(get(`/api/analysis/${(started.body as { id: string }).id}`));
     },
   },

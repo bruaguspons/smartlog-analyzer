@@ -1,8 +1,7 @@
 import type { ZodApi } from '@/shared/http/zod-api.types.js';
 import { UnauthorizedError } from '@/shared/errors.js';
 import type { LogsRoutesDeps } from '@/modules/logs/http/create-logs-routes.types.js';
-import { logResponseSchema } from '@/modules/logs/http/log-response/log-response.schema.js';
-import { createIngestLogBodySchema } from './ingest-log.schema.js';
+import { createIngestLogBodySchema, logResponseSchema } from '@/schemas/logs.schema.js';
 
 export function registerIngestLogRoute(api: ZodApi, deps: LogsRoutesDeps): void {
   const bodySchema = createIngestLogBodySchema(deps.now);

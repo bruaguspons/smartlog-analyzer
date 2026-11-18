@@ -1,6 +1,6 @@
 import type { ZodApi } from '@/shared/http/zod-api.types.js';
 import type { AnalysisRoutesDeps } from '@/modules/analysis/http/create-analysis-routes.types.js';
-import { analyzeBodySchema, analyzeResponseSchema } from './start-analysis.schema.js';
+import { analyzeBodySchema, analyzeResponseSchema } from '@/schemas/analysis.schema.js';
 
 export function registerStartAnalysisRoute(api: ZodApi, deps: AnalysisRoutesDeps): void {
   api.post(

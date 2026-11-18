@@ -1,4 +1,5 @@
 import { createRuntime } from '@/composition/create-runtime.js';
+import type { RuntimeDeps } from '@/composition/runtime.types.js';
 import { InMemoryAnalysisRepository } from '@/repositories/in-memory-analysis.repository.js';
 import { InMemoryLogRepository } from '@/repositories/in-memory-log.repository.js';
 import { InMemoryServiceRepository } from '@/repositories/in-memory-service.repository.js';
@@ -12,8 +13,8 @@ const sequentialId = () => {
   return () => `0192f1c0-cccc-7000-8000-${String((counter += 1)).padStart(12, '0')}`;
 };
 
-/** The real runtime over in-memory fakes, with a fixed clock and ids, and a scripted model. */
-export function buildContractRuntime(options: WorldOptions = {}) {
+/** In-memory fakes with a fixed clock and ids, and a scripted model: the input of every contract world. */
+export function buildContractDeps(options: WorldOptions = {}) {
   const logRepo = new InMemoryLogRepository();
   seedLogs(logRepo);
   const analysisRepo = new InMemoryAnalysisRepository();
@@ -23,7 +24,7 @@ export function buildContractRuntime(options: WorldOptions = {}) {
     LOG_LEVEL: 'silent',
     LLM_MAX_RETRIES: '0',
   });
-  const runtime = createRuntime(config, {
+  const deps: RuntimeDeps = {
     serviceRepo: new InMemoryServiceRepository([
       { id: 7, name: 'payments-api', description: null, apiKey: KEY, isActive: true },
       { id: 8, name: 'orders-api', description: null, apiKey: OTHER_KEY, isActive: true },
@@ -36,6 +37,12 @@ export function buildContractRuntime(options: WorldOptions = {}) {
     disconnect: () => Promise.resolve(),
     newId: sequentialId(),
     now: () => NOW,
-  });
-  return { runtime, logRepo, analysisRepo, llm };
+  };
+  return { config, deps, logRepo, analysisRepo, llm };
+}
+
+/** The real runtime over those fakes. */
+export function buildContractRuntime(options: WorldOptions = {}) {
+  const { config, deps, logRepo, analysisRepo, llm } = buildContractDeps(options);
+  return { runtime: createRuntime(config, deps), logRepo, analysisRepo, llm };
 }

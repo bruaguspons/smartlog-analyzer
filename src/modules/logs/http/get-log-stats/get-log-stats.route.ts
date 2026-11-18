@@ -1,6 +1,6 @@
 import type { ZodApi } from '@/shared/http/zod-api.types.js';
 import type { LogsRoutesDeps } from '@/modules/logs/http/create-logs-routes.types.js';
-import { logStatsQuerySchema, logStatsResponseSchema } from './get-log-stats.schema.js';
+import { logStatsQuerySchema, logStatsResponseSchema } from '@/schemas/logs.schema.js';
 
 export function registerGetLogStatsRoute(api: ZodApi, deps: LogsRoutesDeps): void {
   // Static path: find-my-way matches it before any parametric /logs/:id, whatever the registration order.

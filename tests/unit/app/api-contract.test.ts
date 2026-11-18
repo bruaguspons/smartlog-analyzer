@@ -1,5 +1,7 @@
+import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildContractRuntime } from '@tests/support/contract/build-contract-world.js';
+import { buildExpressApp } from '@tests/support/apps/build-express-app.js';
+import { buildContractDeps, buildContractRuntime } from '@tests/support/contract/build-contract-world.js';
 import {
   CONTRACT_CASES,
   type ContractCase,
@@ -11,6 +13,7 @@ import {
 /**
  * Replays the request matrix against an HTTP implementation and compares what comes back with a golden
  * file committed next to this test. The golden file is the definition of "same API" across framework changes.
+ * The Express app and the Fastify runtime must both match it byte for byte: the file is never edited to make one pass.
  */
 type Executor = (request: ContractRequest) => Promise<ContractReply>;
 
@@ -51,16 +54,40 @@ function fastifyWorld(testCase: ContractCase): ContractWorld {
     });
     return toReply(res.statusCode, res.headers, res.body);
   };
-  return { runtime, logRepo, analysisRepo, llm, send };
+  return { runner: runtime.runner, logRepo, analysisRepo, llm, send };
 }
 
-describe('HTTP contract (Fastify)', () => {
-  it('matches the golden file', async () => {
-    const recorded: Record<string, ContractReply> = {};
-    for (const testCase of CONTRACT_CASES) {
-      recorded[testCase.name] = await testCase.run(fastifyWorld(testCase));
-    }
-    expect(Object.keys(recorded)).toHaveLength(CONTRACT_CASES.length);
-    await expect(`${JSON.stringify(recorded, null, 2)}\n`).toMatchFileSnapshot('./api-contract.golden.json');
+/** Express executor: in-process supertest against the app built from the same fakes. */
+function expressWorld(testCase: ContractCase): ContractWorld {
+  const { config, deps, logRepo, analysisRepo, llm } = buildContractDeps(testCase.options);
+  const { app, runner } = buildExpressApp(config, deps);
+  closers.push(() => runner.shutdown());
+  const send: Executor = async (contract) => {
+    const method = contract.method.toLowerCase() as 'get' | 'post' | 'head';
+    const req = request(app)[method](contract.url).set(contract.headers ?? {});
+    if (contract.noContentType) req.unset('Content-Type');
+    else if (contract.body !== undefined && !contract.headers?.['content-type']) req.set('Content-Type', 'application/json');
+    const res = await (contract.body === undefined ? req : req.send(contract.body));
+    return toReply(res.status, res.headers, res.text ?? '');
+  };
+  return { runner, logRepo, analysisRepo, llm, send };
+}
+
+async function record(buildWorld: (testCase: ContractCase) => ContractWorld): Promise<string> {
+  const recorded: Record<string, ContractReply> = {};
+  for (const testCase of CONTRACT_CASES) {
+    recorded[testCase.name] = await testCase.run(buildWorld(testCase));
+  }
+  expect(Object.keys(recorded)).toHaveLength(CONTRACT_CASES.length);
+  return `${JSON.stringify(recorded, null, 2)}\n`;
+}
+
+describe('HTTP contract', () => {
+  it('Fastify matches the golden file', async () => {
+    await expect(await record(fastifyWorld)).toMatchFileSnapshot('./api-contract.golden.json');
+  });
+
+  it('Express matches the golden file', async () => {
+    await expect(await record(expressWorld)).toMatchFileSnapshot('./api-contract.golden.json');
   });
 });
