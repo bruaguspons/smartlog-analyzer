@@ -11,7 +11,7 @@ describe('loadConfig', () => {
       logLevel: 'info',
       databaseUrl: BASE.DATABASE_URL,
       seedOnStart: true,
-      llm: { provider: 'mock', model: 'gemini-3.6-flash', timeoutMs: 30000, maxRetries: 3 },
+      llm: { provider: 'mock', model: 'gemini-3.6-flash', timeoutMs: 30000, maxRetries: 3, mockBehavior: 'normal' },
     });
   });
 
@@ -74,6 +74,7 @@ describe('loadConfig LLM settings', () => {
       model: 'gemini-3.6-flash',
       timeoutMs: 30000,
       maxRetries: 3,
+      mockBehavior: 'normal',
     });
   });
 
@@ -112,5 +113,17 @@ describe('loadConfig LLM settings', () => {
 
   it.each(['-1', '11', 'abc', '1.5', ''])('rejects LLM_MAX_RETRIES=%j', (value) => {
     expect(() => loadConfig({ ...BASE, LLM_MAX_RETRIES: value })).toThrow(/LLM_MAX_RETRIES/);
+  });
+});
+
+describe('loadConfig LLM_MOCK_BEHAVIOR', () => {
+  it.each(['normal', 'invalid', 'timeout'] as const)('accepts %j', (value) => {
+    expect(loadConfig({ ...BASE, LLM_MOCK_BEHAVIOR: value }).llm.mockBehavior).toBe(value);
+  });
+
+  it('rejects an unknown value with a ConfigError that names the variable', () => {
+    const load = () => loadConfig({ ...BASE, LLM_MOCK_BEHAVIOR: 'slow' });
+    expect(load).toThrow(ConfigError);
+    expect(load).toThrow(/LLM_MOCK_BEHAVIOR/);
   });
 });

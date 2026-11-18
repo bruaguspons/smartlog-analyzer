@@ -2,11 +2,14 @@ import { z } from 'zod';
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 const LLM_PROVIDERS = ['mock', 'gemini'] as const;
+const MOCK_BEHAVIORS = ['normal', 'invalid', 'timeout'] as const;
 const MAX_LLM_RETRIES = 10;
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
+
+export type MockBehavior = (typeof MOCK_BEHAVIORS)[number];
 
 export interface Config {
   port: number;
@@ -23,6 +26,8 @@ export interface Config {
     timeoutMs: number;
     /** Retries after the first attempt (0..10). */
     maxRetries: number;
+    /** Only read by the mock provider (dev and tests): how it answers. */
+    mockBehavior: MockBehavior;
   };
 }
 
@@ -49,6 +54,8 @@ const EnvSchema = z
     // Per-attempt timeout. An empty string coerces to 0 and is rejected by min(1).
     LLM_TIMEOUT_MS: z.coerce.number().int().min(1).default(30_000),
     // Retries after the first attempt; 0 means a single attempt. The regex rejects '' (which would coerce to 0).
+    // Dev-only knob of the mock provider: `invalid` answers with non-JSON, `timeout` hangs until aborted.
+    LLM_MOCK_BEHAVIOR: z.enum(MOCK_BEHAVIORS).default('normal'),
     LLM_MAX_RETRIES: z
       .string()
       .regex(/^\d+$/)
@@ -81,6 +88,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       model: parsed.LLM_MODEL,
       timeoutMs: parsed.LLM_TIMEOUT_MS,
       maxRetries: parsed.LLM_MAX_RETRIES,
+      mockBehavior: parsed.LLM_MOCK_BEHAVIOR,
     },
   };
 }

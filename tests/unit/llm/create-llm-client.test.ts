@@ -9,12 +9,21 @@ const llm = (overrides: Partial<Config['llm']> = {}): Config['llm'] => ({
   model: 'gemini-3.6-flash',
   timeoutMs: 30_000,
   maxRetries: 3,
+  mockBehavior: 'normal',
   ...overrides,
 });
 
 describe('createLlmClient', () => {
   it('returns the mock client for the mock provider', () => {
     expect(createLlmClient(llm())).toBeInstanceOf(MockClient);
+  });
+
+  it('passes the configured mock behavior to the mock client', async () => {
+    const client = createLlmClient(llm({ mockBehavior: 'invalid' }));
+    const result = await client.generate({ systemInstruction: '', prompt: '', entries: [] }, new AbortController().signal);
+    expect(() => {
+      JSON.parse(result.text) as unknown;
+    }).toThrow();
   });
 
   it('returns a Gemini client with the configured model when provider is gemini', () => {

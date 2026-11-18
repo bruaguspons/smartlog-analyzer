@@ -1,7 +1,6 @@
+import type { MockBehavior } from '@/shared/config/load-config.js';
 import type { LlmClient, LlmRequest, LlmResult } from './llm-client.js';
 import type { LlmResponse } from './llm-response.js';
-
-export type MockBehavior = 'normal' | 'invalid' | 'timeout';
 
 export interface MockClientOptions {
   /** `invalid` answers with non-JSON; `timeout` hangs until the signal aborts. Default `normal`. */

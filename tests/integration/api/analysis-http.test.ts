@@ -27,7 +27,7 @@ import { scriptedLlm } from '@tests/support/integration/scripted-llm.js';
 vi.mock('@/llm/llm.js', async () => (await import('@tests/support/fakes/scripted-llm-module.js')).scriptedLlmModule());
 
 /**
- * Analysis outcomes end to end: HTTP -> real composition -> Postgres, with only the LLM scripted.
+ * Analysis outcomes end to end: HTTP -> app -> Postgres, with only the LLM scripted.
  * Timeouts use a real short `LLM_TIMEOUT_MS`; the backoff sleep is instant (see the harness).
  * The 409 while an analysis is PROCESSING and boot-time recovery are covered in analysis-flow.test.ts.
  */

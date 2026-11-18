@@ -9,5 +9,5 @@ export function createLlmClient(llm: Config['llm']): LlmClient {
     if (!llm.apiKey) throw new Error('GEMINI_API_KEY is required when LLM_PROVIDER=gemini');
     return new GeminiClient({ apiKey: llm.apiKey, model: llm.model });
   }
-  return new MockClient();
+  return new MockClient({ behavior: llm.mockBehavior });
 }
